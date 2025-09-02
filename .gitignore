@@ -1,1 +1,3 @@
 backend/tmp/main.exe
+*.env
+.env
