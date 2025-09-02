@@ -1,3 +1,4 @@
 backend/tmp/main.exe
 *.env
 .env
+backend/tmp/build-errors.log

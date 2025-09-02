@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,18 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// StudentData represents the payload expected from the frontend for ปพ.1
-type StudentData struct {
-	Name         string `json:"name" bson:"name" binding:"required"`
-	IDCard       string `json:"id_card" bson:"id_card" binding:"required"`
-	Class        string `json:"class" bson:"class" binding:"required"`
-	Room         string `json:"room" bson:"room" binding:"required"`
-	AcademicYear string `json:"academic_year" bson:"academic_year" binding:"required"`
-	DateOfBirth  string `json:"date_of_birth" bson:"date_of_birth" binding:"required"`
-	FatherName   string `json:"father_name" bson:"father_name" binding:"required"`
-	MotherName   string `json:"mother_name" bson:"mother_name" binding:"required"`
-	Purpose      string `json:"purpose" bson:"purpose" binding:"required"`
-}
+// StudentData moved to models.go
 
 var mongoColl *mongo.Collection
 
@@ -44,20 +32,10 @@ func initMongo(uri string) *mongo.Client {
 }
 
 func main() {
-	// MongoDB connection URI - read from MONGO_URI env or use default
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
-	// Read DB name from env (DB_NAME) or default to "records"
-	dbName := os.Getenv("DB_NAME")
-	if dbName == "" {
-		dbName = "records"
-	}
-
-	client := initMongo(mongoURI)
+	cfg := LoadConfig()
+	client := initMongo(cfg.MongoURI)
 	// use database from DB_NAME and collection `students`
-	mongoColl = client.Database(dbName).Collection("students")
+	mongoColl = client.Database(cfg.DBName).Collection("students")
 
 	r := gin.Default()
 
