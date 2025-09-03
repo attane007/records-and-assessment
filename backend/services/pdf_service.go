@@ -150,7 +150,7 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.Ln(6)
 
 	pdf.SetY(pageMargins.Top + 60)
-	pdf.SetFont(thaiFontFamily, "", 12)
+	pdf.SetFont(thaiFontFamily, "", 14)
 	// Format request.CreatedAt into Thai date (day, Thai month name, Buddhist year)
 	reqDate := request.CreatedAt
 	thaiMonths := []string{"มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"}
@@ -166,61 +166,51 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.Ln(6)
 
 	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
-		pdf.SetY(pageMargins.Top + 65)
+		pdf.SetY(pageMargins.Top + 68)
 		pdf.SetX(pageMargins.Left)
 		pdf.CellFormat(printableW, 6, "เรื่อง    ขอใบรับรองผลการศึกษา(ปพ.7)", "", 1, "L", false, 0, "")
 	} else {
 		// Default subject for ปพ.1 (รบ.1)
-		pdf.SetY(pageMargins.Top + 65)
+		pdf.SetY(pageMargins.Top + 68)
 		pdf.SetX(pageMargins.Left)
 		pdf.CellFormat(printableW, 6, "เรื่อง    ขอใบระเบียนแสดงผลการเรียน(รบ.1/ปพ.1)", "", 1, "L", false, 0, "")
 	}
-
-	// Student Information header (left-aligned)
-	// Position student info area below header/title
-	pdf.SetY(pageMargins.Top + 36)
-	pdf.SetFont(thaiFontFamily, "B", 12)
-	pdf.Cell(50, 8, "ข้อมูลผู้ขอ")
-	pdf.Ln(10)
-
-	pdf.SetFont(thaiFontFamily, "", 10)
-	pdf.Cell(40, 6, "ชื่อนามสกุล: ")
-	pdf.Cell(100, 6, request.Prefix+" "+request.Name)
 	pdf.Ln(6)
 
-	pdf.Cell(40, 6, "เลขบัตรประชาชน: ")
-	pdf.Cell(100, 6, request.IDCard)
+	pdf.SetY(pageMargins.Top + 77)
+	pdf.SetX(pageMargins.Left)
+	pdf.CellFormat(printableW, 6, "เรียน   ผู้อำนวยการโรงเรียนโพนงามพิทยานุกูล", "", 1, "L", false, 0, "")
 	pdf.Ln(6)
 
-	pdf.Cell(40, 6, "วันเกิด: ")
-	pdf.Cell(100, 6, request.DateOfBirth)
+	pdf.SetY(pageMargins.Top + 90)
+	pdf.SetX(pageMargins.Left + 9)
+	// Split into two cells so filling name and ID won't shift each other
+	leftWidth := printableW * 0.45
+	rightWidth := printableW - leftWidth
+	name := strings.TrimSpace(request.Prefix + " " + request.Name)
+	// Left: split into label cell and value cell
+	labelLeftW := leftWidth * 0.2
+	valueLeftW := leftWidth - labelLeftW
+	pdf.CellFormat(labelLeftW, 6, "ข้าพเจ้า: _____________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(valueLeftW, 6, name, "", 0, "C", false, 0, "")
+	// Right: split into label cell, ID value cell, and class/room cell
+	labelRightW := rightWidth * 0.38
+	// reserve a portion of rightWidth for the class/room cell
+	classCellW := rightWidth * 0.3
+	valueRightW := rightWidth - labelRightW - classCellW
+	pdf.CellFormat(labelRightW, 6, "เลขประจำตัวประชาชน:____________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(valueRightW, 6, request.IDCard, "", 0, "L", false, 0, "")
+	// class/room cell (label + value)
+	classVal := strings.TrimSpace(request.Class + "/" + request.Room)
+	if classVal == "/" {
+		// empty class/room
+		classVal = ""
+	}
+	labelClassW := classCellW * 0.28
+	valueClassW := classCellW - labelClassW
+	pdf.CellFormat(labelClassW, 6, "ชั้น: _______", "", 0, "L", false, 0, "")
+	pdf.CellFormat(valueClassW, 6, classVal, "", 1, "L", false, 0, "")
 	pdf.Ln(6)
-
-	if request.Class != "" && request.Room != "" {
-		pdf.Cell(40, 6, "ชั้น/ห้อง: ")
-		pdf.Cell(100, 6, request.Class+"/"+request.Room)
-		pdf.Ln(6)
-	}
-
-	if request.AcademicYear != "" {
-		pdf.Cell(40, 6, "ปีการศึกษา: ")
-		pdf.Cell(100, 6, request.AcademicYear)
-		pdf.Ln(6)
-	}
-
-	if request.FatherName != "" {
-		pdf.Cell(40, 6, "ชื่อบิดา: ")
-		pdf.Cell(100, 6, request.FatherName)
-		pdf.Ln(6)
-	}
-
-	if request.MotherName != "" {
-		pdf.Cell(40, 6, "ชื่อมารดา: ")
-		pdf.Cell(100, 6, request.MotherName)
-		pdf.Ln(6)
-	}
-
-	pdf.Ln(8)
 
 	// Request Details
 	pdf.SetFont(thaiFontFamily, "B", 12)
