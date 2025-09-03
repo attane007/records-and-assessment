@@ -117,3 +117,52 @@ func GetStats(ctx context.Context, coll *mongo.Collection) (StatsResult, error) 
 
 	return out, nil
 }
+
+// RequestRecord represents a student request/application document with metadata
+type RequestRecord struct {
+	ID           interface{} `json:"id" bson:"_id"`
+	Prefix       string      `json:"prefix" bson:"prefix"`
+	Name         string      `json:"name" bson:"name"`
+	DocumentType string      `json:"document_type" bson:"document_type"`
+	IDCard       string      `json:"id_card" bson:"id_card"`
+	DateOfBirth  string      `json:"date_of_birth" bson:"date_of_birth"`
+	Class        string      `json:"class" bson:"class"`
+	Room         string      `json:"room" bson:"room"`
+	AcademicYear string      `json:"academic_year" bson:"academic_year"`
+	FatherName   string      `json:"father_name" bson:"father_name"`
+	MotherName   string      `json:"mother_name" bson:"mother_name"`
+	Purpose      string      `json:"purpose" bson:"purpose"`
+	CreatedAt    time.Time   `json:"created_at" bson:"created_at"`
+}
+
+// GetRequests retrieves all student requests with pagination
+func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int) ([]RequestRecord, int64, error) {
+	// Calculate skip value for pagination
+	skip := (page - 1) * limit
+
+	// Get total count
+	total, err := coll.CountDocuments(ctx, bson.D{})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get paginated results, sorted by created_at descending (newest first)
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "created_at", Value: -1}}}},
+		bson.D{{Key: "$skip", Value: skip}},
+		bson.D{{Key: "$limit", Value: limit}},
+	}
+
+	cursor, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	var requests []RequestRecord
+	if err := cursor.All(ctx, &requests); err != nil {
+		return nil, 0, err
+	}
+
+	return requests, total, nil
+}

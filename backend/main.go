@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"backend/models"
@@ -101,6 +102,40 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, stats)
+	})
+
+	// GET /api/requests - return paginated list of student requests
+	r.GET("/api/requests", func(c *gin.Context) {
+		// Parse pagination parameters
+		pageStr := c.DefaultQuery("page", "1")
+		limitStr := c.DefaultQuery("limit", "20")
+
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit < 1 || limit > 100 {
+			limit = 20
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+
+		requests, total, err := services.GetRequests(ctx, mongoColl, page, limit)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch requests"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"requests": requests,
+			"total":    total,
+			"page":     page,
+			"limit":    limit,
+			"pages":    (total + int64(limit) - 1) / int64(limit), // Calculate total pages
+		})
 	})
 
 	r.Run() // listen and serve on 0.0.0.0:8080
