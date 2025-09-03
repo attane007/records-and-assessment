@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"backend/models"
+	"backend/services"
 	"backend/settings"
 	"backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -81,27 +81,26 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// insert document
-		res, err := mongoColl.InsertOne(ctx, bson.M{
-			"prefix":        payload.Prefix,
-			"document_type": payload.DocumentType,
-			"name":          payload.Name,
-			"id_card":       payload.IDCard,
-			"class":         payload.Class,
-			"room":          payload.Room,
-			"academic_year": payload.AcademicYear,
-			"date_of_birth": payload.DateOfBirth,
-			"father_name":   payload.FatherName,
-			"mother_name":   payload.MotherName,
-			"purpose":       payload.Purpose,
-			"created_at":    time.Now(),
-		})
+		id, err := services.SaveStudent(ctx, mongoColl, payload)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save data"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"message": "data saved", "id": res.InsertedID})
+		c.JSON(http.StatusOK, gin.H{"message": "data saved", "id": id})
+	})
+
+	// GET /api/stats - return total count, counts by year and by month
+	r.GET("/api/stats", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+
+		stats, err := services.GetStats(ctx, mongoColl)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to aggregate stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
 	})
 
 	r.Run() // listen and serve on 0.0.0.0:8080
