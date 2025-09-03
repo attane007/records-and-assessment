@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -12,6 +13,22 @@ import (
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
 func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
+
+	// Page margin variables (left, right, top, bottom)
+	pageMargins := struct {
+		Left   float64
+		Right  float64
+		Top    float64
+		Bottom float64
+	}{
+		Left:   18, // mm
+		Right:  18, // mm
+		Top:    12, // mm
+		Bottom: 18, // mm
+	}
+	// apply margins to pdf
+	pdf.SetMargins(pageMargins.Left, pageMargins.Top, pageMargins.Right)
+	pdf.SetAutoPageBreak(true, pageMargins.Bottom)
 
 	// Try to load THSarabun.ttf from known locations and register as UTF-8 font
 	thaiFontFamily := "Arial" // fallback
@@ -93,20 +110,31 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	// Header with centered crest and titles (match provided form look)
 	// If image found, draw it centered at top
 	pageW, _ := pdf.GetPageSize()
+	printableW := pageW - pageMargins.Left - pageMargins.Right
 	if imgPath != "" {
-		imgW := 28.0 // mm, adjust to match appearance
-		x := (pageW - imgW) / 2
+		imgW := 25.0 // mm, adjust to match appearance
+		x := pageMargins.Left + (printableW-imgW)/2
 		// ImageOptions will accept file path directly
 		opt := gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}
-		pdf.ImageOptions(imgPath, x, 8, imgW, 0, false, opt, 0, "")
+		pdf.ImageOptions(imgPath, x, pageMargins.Top/2, imgW, 0, false, opt, 0, "")
 	}
 
 	// Small vertical spacing after crest
-	pdf.SetY(28)
+	pdf.SetY(pageMargins.Top + 18)
 
 	// Title lines: use THSarabun if available
 	pdf.SetFont(thaiFontFamily, "B", 18)
-	pdf.CellFormat(0, 8, "คำร้องขอใบระเบียนแสดงผลการเรียน(รบ.๑/ปพ.๑)", "", 1, "C", false, 0, "")
+	// choose title based on document type
+	docType := strings.TrimSpace(request.DocumentType)
+	// normalize common variants (ASCII dot vs thai char)
+	docType = strings.ReplaceAll(docType, ".", "")
+	docType = strings.ReplaceAll(docType, "๗", "7")
+	// default title (for ปพ.1)
+	title := "คำร้องขอใบระเบียนแสดงผลการเรียน(รบ.๑/ปพ.๑)"
+	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
+		title = "คำร้องขอใบรับรองผลการศึกษา(ปพ.๗)"
+	}
+	pdf.CellFormat(0, 14, title, "", 1, "C", false, 0, "")
 	pdf.Ln(2)
 	pdf.SetFont(thaiFontFamily, "", 12)
 	pdf.CellFormat(0, 6, "โรงเรียนตัวอย่างบนฟอร์ม", "", 1, "C", false, 0, "")
@@ -116,7 +144,8 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.SetFont(thaiFontFamily, "", 12)
 
 	// Student Information header (left-aligned)
-	pdf.SetY(60)
+	// Position student info area below header/title
+	pdf.SetY(pageMargins.Top + 36)
 	pdf.SetFont(thaiFontFamily, "B", 12)
 	pdf.Cell(50, 8, "ข้อมูลผู้ขอ")
 	pdf.Ln(10)
