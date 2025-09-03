@@ -1,7 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSessionFromCookies } from "@/lib/session";
-import "server-only";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface RequestRecord {
   id: string;
@@ -16,6 +18,7 @@ interface RequestRecord {
   father_name?: string;
   mother_name?: string;
   purpose: string;
+  status: string; // pending, completed, cancelled
   created_at: string;
 }
 
@@ -27,35 +30,126 @@ interface RequestsResponse {
   pages: number;
 }
 
-export default async function RequestsPage({
-  searchParams = {},
-}: {
-  searchParams?: { page?: string };
-}) {
-  const session = await getSessionFromCookies();
-  if (!session) redirect("/login");
-  // Safely resolve searchParams (it may be a promise in some Next.js render paths)
-  // and then read page with robust parsing.
-  // Awaiting a non-promise is a no-op, so this is safe in all environments.
-  const resolvedSearchParams = (await (searchParams as unknown)) as { page?: string } | undefined;
-  const rawPage = (resolvedSearchParams && (resolvedSearchParams.page as string)) ?? "1";
-  let page = parseInt(rawPage, 10);
-  if (Number.isNaN(page) || page < 1) page = 1;
-  const limit = 20;
+export default function RequestsPage() {
+  const [session, setSession] = useState<any>(null);
+  const [data, setData] = useState<RequestsResponse>({ requests: [], total: 0, page: 1, limit: 20, pages: 0 });
+  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
 
-  // Fetch request data from backend
-  const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-  let data: RequestsResponse = { requests: [], total: 0, page: 1, limit: 20, pages: 0 };
-  
-  try {
-    const res = await fetch(`${backendURL}/api/requests?page=${page}&limit=${limit}`, { 
-      cache: "no-store" 
-    });
-    if (res.ok) {
-      data = await res.json();
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch('/api/me');
+        if (!res.ok) {
+          redirect('/login');
+          return;
+        }
+        const payload = await res.json();
+        setSession(payload.session);
+      } catch (error) {
+        redirect('/login');
+      }
+    };
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!session) return;
+      
+      setLoading(true);
+      // Read page from client-side search params
+      const rawPage = (searchParams?.get("page") as string) ?? "1";
+      let page = parseInt(rawPage, 10);
+      if (Number.isNaN(page) || page < 1) page = 1;
+      const limit = 20;
+
+      // Fetch request data from backend
+      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+      
+      try {
+        const res = await fetch(`${backendURL}/api/requests?page=${page}&limit=${limit}`, { 
+          cache: "no-store" 
+        });
+        if (res.ok) {
+          const responseData = await res.json();
+          setData(responseData);
+        }
+      } catch (error) {
+        console.error("Failed to fetch requests:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [session, searchParams?.get("page")]);
+
+  const handleUpdateStatus = async (requestId: string, status: string) => {
+    try {
+      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+      const response = await fetch(`${backendURL}/api/requests/${requestId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (response.ok) {
+        // Refresh data after update
+        const searchParams = new URLSearchParams(window.location.search);
+        const page = parseInt(searchParams.get('page') || '1', 10);
+        const limit = 20;
+
+        const res = await fetch(`${backendURL}/api/requests?page=${page}&limit=${limit}`, { 
+          cache: "no-store" 
+        });
+        if (res.ok) {
+          const responseData = await res.json();
+          setData(responseData);
+        }
+        
+        alert(`อัพเดตสถานะเป็น ${status === 'completed' ? 'สำเร็จ' : status === 'cancelled' ? 'ยกเลิก' : 'รออนุมัติ'} แล้ว`);
+      } else {
+        alert('ไม่สามารถอัพเดตสถานะได้ กรุณาลองใหม่อีกครั้ง');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      alert('เกิดข้อผิดพลาดในการอัพเดตสถานะ');
     }
-  } catch (error) {
-    console.error("Failed to fetch requests:", error);
+  };
+
+  const handlePrintPDF = async (requestId: string) => {
+    try {
+      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+      const response = await fetch(`${backendURL}/api/pdf/${requestId}`, {
+        method: 'GET',
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `request-${requestId}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert('ไม่สามารถสร้าง PDF ได้ กรุณาลองใหม่อีกครั้ง');
+      }
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('เกิดข้อผิดพลาดในการสร้าง PDF');
+    }
+  };
+
+  if (!session) {
+    return <div className="min-h-screen flex items-center justify-center">
+      <div className="text-slate-500">กำลังตรวจสอบสิทธิ์การเข้าใช้...</div>
+    </div>;
   }
 
   const formatDate = (dateString: string) => {
@@ -158,7 +252,9 @@ export default async function RequestsPage({
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ประเภทเอกสาร</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ชั้น</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">วัตถุประสงค์</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">สถานะ</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">วันที่ส่ง</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">การดำเนินการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
@@ -201,14 +297,64 @@ export default async function RequestsPage({
                             {request.purpose}
                           </div>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            request.status === 'completed' 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                              : request.status === 'cancelled'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+                          }`}>
+                            {request.status === 'completed' ? 'สำเร็จ' : request.status === 'cancelled' ? 'ยกเลิก' : 'รออนุมัติ'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">
                           {formatDate(request.created_at)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handlePrintPDF(request.id)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
+                              title="ปรินท์ PDF ของ ปพ.1"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                              </svg>
+                              ปพ.1
+                            </button>
+                            
+                            {(request.status === 'pending' || !request.status) && (
+                              <>
+                                <button
+                                  onClick={() => handleUpdateStatus(request.id, 'completed')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-200 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors cursor-pointer shadow-sm"
+                                  title="อนุมัติคำร้อง"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  สำเร็จ
+                                </button>
+                                <button
+                                  onClick={() => handleUpdateStatus(request.id, 'cancelled')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-md hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer shadow-sm"
+                                  title="ยกเลิกคำร้อง"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  ยกเลิก
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center">
+                      <td colSpan={9} className="px-6 py-12 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <svg className="w-12 h-12 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

@@ -24,6 +24,7 @@ func SaveStudent(ctx context.Context, coll *mongo.Collection, payload models.Stu
 		"father_name":   payload.FatherName,
 		"mother_name":   payload.MotherName,
 		"purpose":       payload.Purpose,
+		"status":        "pending", // Default status is pending
 		"created_at":    time.Now(),
 	})
 	if err != nil {
@@ -132,6 +133,7 @@ type RequestRecord struct {
 	FatherName   string      `json:"father_name" bson:"father_name"`
 	MotherName   string      `json:"mother_name" bson:"mother_name"`
 	Purpose      string      `json:"purpose" bson:"purpose"`
+	Status       string      `json:"status" bson:"status"` // pending, completed, cancelled
 	CreatedAt    time.Time   `json:"created_at" bson:"created_at"`
 }
 
@@ -165,4 +167,31 @@ func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int) (
 	}
 
 	return requests, total, nil
+}
+
+// GetRequestByID retrieves a single request by its ID
+func GetRequestByID(ctx context.Context, coll *mongo.Collection, id interface{}) (*RequestRecord, error) {
+	var request RequestRecord
+
+	filter := bson.M{"_id": id}
+	err := coll.FindOne(ctx, filter).Decode(&request)
+	if err != nil {
+		return nil, err
+	}
+
+	return &request, nil
+}
+
+// UpdateRequestStatus updates the status of a request
+func UpdateRequestStatus(ctx context.Context, coll *mongo.Collection, id interface{}, status string) error {
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			"status":     status,
+			"updated_at": time.Now(),
+		},
+	}
+
+	_, err := coll.UpdateOne(ctx, filter, update)
+	return err
 }

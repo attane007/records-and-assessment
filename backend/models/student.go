@@ -8,6 +8,7 @@ type StudentData struct {
 	IDCard       string `json:"id_card" bson:"id_card" binding:"required,idcard"`
 	DateOfBirth  string `json:"date_of_birth" bson:"date_of_birth" binding:"required"`
 	Purpose      string `json:"purpose" bson:"purpose" binding:"required"`
+	Status       string `json:"status" bson:"status"` // pending, completed, cancelled
 
 	// optional
 	Class        string `json:"class" bson:"class"`
