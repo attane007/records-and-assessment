@@ -20,6 +20,7 @@ type FormState = {
   id_card: string;
   date_of_birth: string;
   purpose: string;
+  document_type?: string;
   class?: string;
   room?: string;
   academic_year?: string;
@@ -34,6 +35,7 @@ export default function Home() {
     id_card: "",
     date_of_birth: "",
     purpose: "",
+  document_type: "",
     class: "",
     room: "",
     academic_year: "",
@@ -58,8 +60,8 @@ export default function Home() {
     setStatus(null);
     setErrors({});
 
-    // basic client-side required check
-    const required = ["name", "id_card", "date_of_birth", "purpose"];
+  // basic client-side required check
+  const required = ["name", "id_card", "date_of_birth", "purpose", "prefix", "document_type"];
     const missing: Record<string, string> = {};
     for (const k of required) {
       // @ts-ignore
@@ -103,6 +105,7 @@ export default function Home() {
           id_card: "",
           date_of_birth: "",
           purpose: "",
+          document_type: "",
           class: "",
           room: "",
           academic_year: "",
@@ -121,9 +124,9 @@ export default function Home() {
   <div className="font-sans min-h-screen bg-[radial-gradient(1200px_400px_at_50%_-50%,#93c5fd,transparent)] bg-slate-50 dark:bg-slate-950 text-foreground">
   <header className="w-full border-b border-cyan-300 dark:border-cyan-900 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
-          <Image className="dark:invert" src="/next.svg" alt="Next.js" width={110} height={24} />
+          <Image className="dark:invert" src="/logo-ppk-512x512-1.ico" alt="PPK logo" width={36} height={36} />
           <span className="text-cyan-600/70">|</span>
-          <h1 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">บันทึกและแบบประเมิน - Student Records</h1>
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">คำร้องขอ ปพ.1/ปพ.7</h1>
         </div>
       </header>
 
@@ -136,8 +139,17 @@ export default function Home() {
           />
           <CardContent>
             <form className="w-full grid gap-5" onSubmit={handleSubmit}>
+                <div className="grid grid-cols-1">
+                  <Field label="ประเภทเอกสาร *">
+                    <select name="document_type" value={form.document_type} onChange={handleChange} className={inputCls}>
+                      <option value="">เลือกประเภท</option>
+                      <option value="ปพ.1">ปพ.1</option>
+                      <option value="ปพ.7">ปพ.7</option>
+                    </select>
+                  </Field>
+                </div>
               <div className="grid sm:grid-cols-3 gap-4">
-                <Field label="คำนำหน้า">
+                <Field label="คำนำหน้า *" error={errors.prefix}>
                   <select name="prefix" value={form.prefix} onChange={handleChange} className={inputCls}>
                     <option value="">เลือก</option>
                     <option value="นาย">นาย</option>
@@ -182,11 +194,29 @@ export default function Home() {
                     name="purpose"
                     value={form.purpose}
                     onChange={handleChange}
-                    placeholder="เช่น ขอ ปพ.1"
+                    placeholder="เช่น สมัครงาน"
                     className={inputCls}
                   />
                 </Field>
               </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <Field label="วันเกิด (ปฏิทินไทย) *" error={errors.date_of_birth}>
+                    <ThaiDatePicker
+                      value={form.date_of_birth}
+                      onChange={(v) => setForm((s) => ({ ...s, date_of_birth: v }))}
+                    />
+                  </Field>
+                  <Field label="วัตถุประสงค์ *" error={errors.purpose}>
+                    <input
+                      name="purpose"
+                      value={form.purpose}
+                      onChange={handleChange}
+                      placeholder="เช่น ขอ ปพ.1"
+                      className={inputCls}
+                    />
+                  </Field>
+                
+                </div>
 
               <div className="grid sm:grid-cols-3 gap-4">
                 <Field label="ชั้นเรียน">
@@ -221,7 +251,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60"
+                  className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60 cursor-pointer"
                 >
                   {loading ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
                 </button>
@@ -233,6 +263,7 @@ export default function Home() {
                       id_card: "",
                       date_of_birth: "",
                       purpose: "",
+                      document_type: "",
                       class: "",
                       room: "",
                       academic_year: "",
@@ -242,7 +273,7 @@ export default function Home() {
                     setErrors({});
                     setStatus(null);
                   }}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer"
                 >
                   ล้างฟอร์ม
                 </button>
@@ -255,7 +286,7 @@ export default function Home() {
           <CardHeader title="ตัวอย่างข้อมูล (Preview)" description="แสดงผลข้อมูลที่กรอกแบบย่อ" iconSrc="/window.svg" />
           <CardContent>
             <div className="grid gap-3 text-sm">
-              <KV k="ชื่อ - สกุล" v={form.name || "-"} />
+              <KV k="ชื่อ - สกุล" v={(form.prefix || form.name) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}` : "-"} />
               <KV k="เลขบัตรประชาชน" v={form.id_card || "-"} />
               <KV k="วันเกิด" v={form.date_of_birth || "-"} />
               <KV k="วัตถุประสงค์" v={form.purpose || "-"} />
@@ -292,9 +323,9 @@ function CardHeader({ title, description, iconSrc }: { title: string; descriptio
   <div className="px-5 pt-5 pb-3 border-b border-cyan-500 dark:border-cyan-900 bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-400 dark:from-slate-900 dark:to-slate-900/40">
       <div className="flex items-center gap-3">
         {iconSrc ? <Image aria-hidden src={iconSrc} alt="" width={20} height={20} className="dark:invert" /> : null}
-        <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100 ">{title}</h2>
       </div>
-      {description ? <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{description}</p> : null}
+      {description ? <p className="mt-1 text-sm text-slate-800 dark:text-slate-300">{description}</p> : null}
     </div>
   );
 }

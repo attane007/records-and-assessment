@@ -84,6 +84,7 @@ func main() {
 		// insert document
 		res, err := mongoColl.InsertOne(ctx, bson.M{
 			"prefix":        payload.Prefix,
+			"document_type": payload.DocumentType,
 			"name":          payload.Name,
 			"id_card":       payload.IDCard,
 			"class":         payload.Class,
