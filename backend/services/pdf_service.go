@@ -116,7 +116,7 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 		x := pageMargins.Left + (printableW-imgW)/2
 		// ImageOptions will accept file path directly
 		opt := gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: true}
-		pdf.ImageOptions(imgPath, x, pageMargins.Top/2, imgW, 0, false, opt, 0, "")
+		pdf.ImageOptions(imgPath, x, pageMargins.Top/2+5, imgW, 0, false, opt, 0, "")
 	}
 
 	// Small vertical spacing after crest
@@ -134,10 +134,7 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
 		title = "คำร้องขอใบรับรองผลการศึกษา(ปพ.๗)"
 	}
-	pdf.CellFormat(0, 14, title, "", 1, "C", false, 0, "")
-	pdf.Ln(2)
-	pdf.SetFont(thaiFontFamily, "", 12)
-	pdf.CellFormat(0, 6, "โรงเรียนตัวอย่างบนฟอร์ม", "", 1, "C", false, 0, "")
+	pdf.CellFormat(0, 18, title, "", 1, "C", false, 0, "")
 	pdf.Ln(6)
 
 	// Use the selected font family for the form body
