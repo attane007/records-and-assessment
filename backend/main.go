@@ -6,13 +6,17 @@ import (
 	"net/http"
 	"time"
 
+	"backend/models"
+	"backend/settings"
+	"backend/utils"
+
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
-// StudentData moved to models.go
 
 var mongoColl *mongo.Collection
 
@@ -32,10 +36,14 @@ func initMongo(uri string) *mongo.Client {
 }
 
 func main() {
-	cfg := LoadConfig()
+	cfg := settings.LoadConfig()
 	client := initMongo(cfg.MongoURI)
 	// use database from DB_NAME and collection `students`
 	mongoColl = client.Database(cfg.DBName).Collection("students")
+	// register custom validator for idcard (13 digits)
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		utils.RegisterIDCardValidation(v)
+	}
 
 	r := gin.Default()
 
@@ -45,8 +53,14 @@ func main() {
 
 	// POST /api/submit - accepts student data from the frontend and saves to MongoDB
 	r.POST("/api/submit", func(c *gin.Context) {
-		var payload StudentData
+		var payload models.StudentData
 		if err := c.ShouldBindJSON(&payload); err != nil {
+			// try to translate validation errors into readable messages
+			if errs, ok := err.(validator.ValidationErrors); ok {
+				messages := utils.ParseValidationErrors(errs, payload)
+				c.JSON(http.StatusBadRequest, gin.H{"errors": messages})
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -77,3 +91,5 @@ func main() {
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }
+
+// validation helpers moved to backend/utils

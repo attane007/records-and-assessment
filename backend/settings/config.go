@@ -1,4 +1,4 @@
-package main
+package settings
 
 import (
 	"log"
@@ -14,7 +14,7 @@ type Config struct {
 	GOEnv    string
 }
 
-// LoadConfig loads .env in non-production (without overwriting existing env vars)
+// LoadConfig loads .env (without overwriting existing env vars)
 // and returns the effective config values.
 func LoadConfig() Config {
 	goEnv := os.Getenv("GO_ENV")
