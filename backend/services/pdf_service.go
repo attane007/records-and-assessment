@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -123,22 +124,57 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.SetY(pageMargins.Top + 18)
 
 	// Title lines: use THSarabun if available
-	pdf.SetFont(thaiFontFamily, "B", 18)
+	pdf.SetFont(thaiFontFamily, "B", 16)
 	// choose title based on document type
 	docType := strings.TrimSpace(request.DocumentType)
 	// normalize common variants (ASCII dot vs thai char)
 	docType = strings.ReplaceAll(docType, ".", "")
 	docType = strings.ReplaceAll(docType, "๗", "7")
 	// default title (for ปพ.1)
-	title := "คำร้องขอใบระเบียนแสดงผลการเรียน(รบ.๑/ปพ.๑)"
+	title := "คำร้องขอใบระเบียนแสดงผลการเรียน(รบ.1/ปพ.1)"
 	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
-		title = "คำร้องขอใบรับรองผลการศึกษา(ปพ.๗)"
+		title = "คำร้องขอใบรับรองผลการศึกษา(ปพ.7)"
 	}
 	pdf.CellFormat(0, 18, title, "", 1, "C", false, 0, "")
+	pdf.Ln(3)
+
+	// Add three lines of school address (left-aligned)
+	pdf.SetFont(thaiFontFamily, "", 14)
+	// Ensure text starts at left printable margin
+	pdf.SetX(pageMargins.Left + 130)
+	pdf.CellFormat(printableW, 6, "โรงเรียนโพนงามพิทยานุกูล", "", 1, "L", false, 0, "")
+	pdf.SetX(pageMargins.Left + 130)
+	pdf.CellFormat(printableW, 6, "ต. โพนงาม  อ. โกสุมพิสัย", "", 1, "L", false, 0, "")
+	pdf.SetX(pageMargins.Left + 130)
+	pdf.CellFormat(printableW, 6, "จ.มหาสารคาม 44140", "", 1, "L", false, 0, "")
 	pdf.Ln(6)
 
-	// Use the selected font family for the form body
+	pdf.SetY(pageMargins.Top + 60)
 	pdf.SetFont(thaiFontFamily, "", 12)
+	// Format request.CreatedAt into Thai date (day, Thai month name, Buddhist year)
+	reqDate := request.CreatedAt
+	thaiMonths := []string{"มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"}
+	day := reqDate.Day()
+	month := ""
+	if int(reqDate.Month()) >= 1 && int(reqDate.Month()) <= 12 {
+		month = thaiMonths[int(reqDate.Month())-1]
+	}
+	year := reqDate.Year() + 543
+	dateStr := fmt.Sprintf("วันที่ %d  เดือน %s  พ.ศ. %d", day, month, year)
+	pdf.SetX(pageMargins.Left + printableW/2)
+	pdf.CellFormat(0, 6, dateStr, "", 1, "L", false, 0, "")
+	pdf.Ln(6)
+
+	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
+		pdf.SetY(pageMargins.Top + 65)
+		pdf.SetX(pageMargins.Left)
+		pdf.CellFormat(printableW, 6, "เรื่อง    ขอใบรับรองผลการศึกษา(ปพ.7)", "", 1, "L", false, 0, "")
+	} else {
+		// Default subject for ปพ.1 (รบ.1)
+		pdf.SetY(pageMargins.Top + 65)
+		pdf.SetX(pageMargins.Left)
+		pdf.CellFormat(printableW, 6, "เรื่อง    ขอใบระเบียนแสดงผลการเรียน(รบ.1/ปพ.1)", "", 1, "L", false, 0, "")
+	}
 
 	// Student Information header (left-aligned)
 	// Position student info area below header/title
