@@ -47,6 +47,19 @@ func main() {
 
 	r := gin.Default()
 
+	// CORS: allow all origins (no credentials)
+	r.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		c.Header("Access-Control-Max-Age", "86400")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
+
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "Hello from Go backend with Gin!"})
 	})
@@ -70,6 +83,7 @@ func main() {
 
 		// insert document
 		res, err := mongoColl.InsertOne(ctx, bson.M{
+			"prefix":        payload.Prefix,
 			"name":          payload.Name,
 			"id_card":       payload.IDCard,
 			"class":         payload.Class,
