@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 
 // validate Thai national ID (13 digits with checksum)
@@ -44,6 +45,8 @@ export default function Home() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<string | null>(null);
+  const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
   function handleChange(
@@ -75,7 +78,9 @@ export default function Home() {
     // validate Thai ID checksum on the client
     if (!isValidThaiID(form.id_card)) {
       setErrors((prev) => ({ ...prev, id_card: "เลขบัตรประชาชนไม่ถูกต้อง (13 หลัก พร้อม checksum)" }));
-      setLoading(false);
+  setLoading(false);
+  setStatus("เลขบัตรประชาชนไม่ถูกต้อง (13 หลัก)");
+  setStatusType('error');
       return;
     }
 
@@ -92,14 +97,18 @@ export default function Home() {
         // backend returns { errors: { field: message } } for validation
         if (data && data.errors) {
           setErrors(data.errors);
-          setStatus("validation error");
+          setStatus("กรุณาตรวจสอบข้อมูลที่กรอก");
+          setStatusType('error');
         } else if (data && data.error) {
           setStatus(data.error);
+          setStatusType('error');
         } else {
           setStatus("unexpected error");
+          setStatusType('error');
         }
       } else {
-        setStatus("Data saved successfully");
+        setStatus("บันทึกข้อมูลเรียบร้อย");
+        setStatusType('success');
         setForm({
           name: "",
           id_card: "",
@@ -112,13 +121,25 @@ export default function Home() {
           father_name: "",
           mother_name: "",
         });
+  setSubmitted(true);
       }
     } catch (err) {
       setStatus("network error: " + (err as Error).message);
+      setStatusType('error');
     } finally {
       setLoading(false);
     }
   }
+
+  // auto-dismiss status toast after a short delay
+  useEffect(() => {
+    if (!status) return;
+    const t = setTimeout(() => {
+      setStatus(null);
+      setStatusType(null);
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [status]);
 
   return (
   <div className="font-sans min-h-screen bg-[radial-gradient(1200px_400px_at_50%_-50%,#93c5fd,transparent)] bg-slate-50 dark:bg-slate-950 text-foreground">
@@ -127,18 +148,38 @@ export default function Home() {
           <Image className="dark:invert" src="/logo-ppk-512x512-1.ico" alt="PPK logo" width={36} height={36} />
           <span className="text-cyan-600/70">|</span>
           <h1 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">คำร้องขอ ปพ.1/ปพ.7</h1>
+          <div className="ml-auto">
+            <Link
+              href="/admin"
+              aria-label="Admin dashboard"
+              className="group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg transition-all duration-200 hover:from-blue-500 hover:to-purple-500 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-purple-300 focus:ring-offset-2"
+              style={{ color: 'white' }}
+            >
+              <svg 
+                className="w-4 h-4 transition-colors duration-200" 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="white"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span style={{ color: 'white' }}>ผู้ดูแลระบบ</span>
+            </Link>
+          </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-start">
-        <Card>
-          <CardHeader
-            title="ส่งข้อมูลนักเรียน"
-            description="กรอกข้อมูลแล้วกดบันทึก ระบบจะส่งไปยัง backend และบันทึกในฐานข้อมูล"
-            iconSrc="/file.svg"
-          />
-          <CardContent>
-            <form className="w-full grid gap-5" onSubmit={handleSubmit}>
+        {!submitted ? (
+          <Card>
+            <CardHeader
+              title="ส่งข้อมูลนักเรียน"
+              description="กรอกข้อมูลแล้วกดบันทึก ระบบจะส่งไปยัง backend และบันทึกในฐานข้อมูล"
+              iconSrc="/file.svg"
+            />
+            <CardContent>
+              <form className="w-full grid gap-5" onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1">
                   <Field label="ประเภทเอกสาร *">
                     <select name="document_type" value={form.document_type} onChange={handleChange} className={inputCls}>
@@ -148,58 +189,41 @@ export default function Home() {
                     </select>
                   </Field>
                 </div>
-              <div className="grid sm:grid-cols-3 gap-4">
-                <Field label="คำนำหน้า *" error={errors.prefix}>
-                  <select name="prefix" value={form.prefix} onChange={handleChange} className={inputCls}>
-                    <option value="">เลือก</option>
-                    <option value="นาย">นาย</option>
-                    <option value="นาง">นาง</option>
-                    <option value="นางสาว">นางสาว</option>
-                    <option value="ด.ช.">ด.ช.</option>
-                    <option value="ด.ญ.">ด.ญ.</option>
-                  </select>
-                </Field>
-
-                <Field label="ชื่อ - สกุล *" error={errors.name}>
-                  <input
-                    name="name"
-                    value={form.name}
-                    onChange={handleChange}
-                    placeholder="เช่น กานต์ชัย ใจดี"
-                    className={inputCls}
-                  />
-                </Field>
-
-                <Field label="เลขบัตรประชาชน (13 หลัก) *" help="ต้องเป็นตัวเลข 13 หลัก" error={errors.id_card}>
-                  <input
-                    name="id_card"
-                    value={form.id_card}
-                    onChange={handleChange}
-                    maxLength={13}
-                    placeholder="1234567890123"
-                    className={inputCls}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="วันเกิด (ปฏิทินไทย) *" error={errors.date_of_birth}>
-                  <ThaiDatePicker
-                    value={form.date_of_birth}
-                    onChange={(v) => setForm((s) => ({ ...s, date_of_birth: v }))}
-                  />
-                </Field>
-                <Field label="วัตถุประสงค์ *" error={errors.purpose}>
-                  <input
-                    name="purpose"
-                    value={form.purpose}
-                    onChange={handleChange}
-                    placeholder="เช่น สมัครงาน"
-                    className={inputCls}
-                  />
-                </Field>
-              </div>
                 <div className="grid sm:grid-cols-3 gap-4">
+                  <Field label="คำนำหน้า *" error={errors.prefix}>
+                    <select name="prefix" value={form.prefix} onChange={handleChange} className={inputCls}>
+                      <option value="">เลือก</option>
+                      <option value="นาย">นาย</option>
+                      <option value="นาง">นาง</option>
+                      <option value="นางสาว">นางสาว</option>
+                      <option value="ด.ช.">ด.ช.</option>
+                      <option value="ด.ญ.">ด.ญ.</option>
+                    </select>
+                  </Field>
+
+                  <Field label="ชื่อ - สกุล *" error={errors.name}>
+                    <input
+                      name="name"
+                      value={form.name}
+                      onChange={handleChange}
+                      placeholder="เช่น กานต์ชัย ใจดี"
+                      className={inputCls}
+                    />
+                  </Field>
+
+                  <Field label="เลขบัตรประชาชน (13 หลัก) *" help="ต้องเป็นตัวเลข 13 หลัก" error={errors.id_card}>
+                    <input
+                      name="id_card"
+                      value={form.id_card}
+                      onChange={handleChange}
+                      maxLength={13}
+                      placeholder="1234567890123"
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4">
                   <Field label="วันเกิด (ปฏิทินไทย) *" error={errors.date_of_birth}>
                     <ThaiDatePicker
                       value={form.date_of_birth}
@@ -211,82 +235,113 @@ export default function Home() {
                       name="purpose"
                       value={form.purpose}
                       onChange={handleChange}
-                      placeholder="เช่น ขอ ปพ.1"
+                      placeholder="เช่น สมัครงาน"
                       className={inputCls}
                     />
                   </Field>
-                
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <Field label="ชั้นเรียน">
+                    <select name="class" value={form.class} onChange={handleChange} className={inputCls}>
+                      <option value="">เลือกชั้น</option>
+                      <option value="ม.1">ม.1</option>
+                      <option value="ม.2">ม.2</option>
+                      <option value="ม.3">ม.3</option>
+                      <option value="ม.4">ม.4</option>
+                      <option value="ม.5">ม.5</option>
+                      <option value="ม.6">ม.6</option>
+                    </select>
+                  </Field>
+                  <Field label="ห้อง">
+                    <input name="room" value={form.room} onChange={handleChange} className={inputCls} />
+                  </Field>
+                  <Field label="ปีการศึกษา">
+                    <input name="academic_year" value={form.academic_year} onChange={handleChange} className={inputCls} />
+                  </Field>
                 </div>
 
-              <div className="grid sm:grid-cols-3 gap-4">
-                <Field label="ชั้นเรียน">
-                  <input name="class" value={form.class} onChange={handleChange} className={inputCls} />
-                </Field>
-                <Field label="ห้อง">
-                  <input name="room" value={form.room} onChange={handleChange} className={inputCls} />
-                </Field>
-                <Field label="ปีการศึกษา">
-                  <input name="academic_year" value={form.academic_year} onChange={handleChange} className={inputCls} />
-                </Field>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="ชื่อบิดา">
-                  <input name="father_name" value={form.father_name} onChange={handleChange} className={inputCls} />
-                </Field>
-                <Field label="ชื่อมารดา">
-                  <input name="mother_name" value={form.mother_name} onChange={handleChange} className={inputCls} />
-                </Field>
-              </div>
-
-              {status && (
-                <div
-                  className={`rounded-lg px-4 py-3 text-sm ${statusClasses(status)}`}
-                >
-                  {status}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="ชื่อบิดา">
+                    <input name="father_name" value={form.father_name} onChange={handleChange} className={inputCls} />
+                  </Field>
+                  <Field label="ชื่อมารดา">
+                    <input name="mother_name" value={form.mother_name} onChange={handleChange} className={inputCls} />
+                  </Field>
                 </div>
-              )}
 
-              <div className="flex gap-3 items-center">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60 cursor-pointer"
-                >
-                  {loading ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm({
-                      name: "",
-                      id_card: "",
-                      date_of_birth: "",
-                      purpose: "",
-                      document_type: "",
-                      class: "",
-                      room: "",
-                      academic_year: "",
-                      father_name: "",
-                      mother_name: "",
-                    });
-                    setErrors({});
-                    setStatus(null);
-                  }}
-                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer"
-                >
-                  ล้างฟอร์ม
-                </button>
+                {status && (
+                  <div
+                    className={`rounded-lg px-4 py-3 text-sm ${statusClasses(status)}`}
+                  >
+                    {status}
+                  </div>
+                )}
+
+                <div className="flex gap-3 items-center">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60 cursor-pointer"
+                  >
+                    {loading ? "กำลังบันทึก..." : statusType === 'success' ? 'เรียบร้อย' : 'บันทึกข้อมูล'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({
+                        name: "",
+                        id_card: "",
+                        date_of_birth: "",
+                        purpose: "",
+                        document_type: "",
+                        class: "",
+                        room: "",
+                        academic_year: "",
+                        father_name: "",
+                        mother_name: "",
+                      });
+                      setErrors({});
+                      setStatus(null);
+                    }}
+                    className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer"
+                  >
+                    ล้างฟอร์ม
+                  </button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader title="ส่งข้อมูลเรียบร้อย" description="ระบบได้รับคำร้องของคุณแล้ว" iconSrc="/file.svg" />
+            <CardContent>
+              <div className="py-6 text-center">
+                <div className="text-lg font-semibold text-emerald-700">ขอบคุณ — ข้อมูลถูกส่งเรียบร้อยแล้ว</div>
+                <div className="mt-3 text-sm text-slate-600">ระบบจะทำการประมวลผลและแจ้งผลตามขั้นตอนต่อไป</div>
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSubmitted(false);
+                      setStatus(null);
+                      setStatusType(null);
+                    }}
+                    className="inline-flex items-center justify-center rounded-lg border border-cyan-500 px-4 py-2 text-sm text-cyan-700 hover:bg-cyan-50"
+                  >
+                    กรอกข้อมูลอีกครั้ง
+                  </button>
+                </div>
               </div>
-            </form>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="sticky top-6">
           <CardHeader title="ตัวอย่างข้อมูล (Preview)" description="แสดงผลข้อมูลที่กรอกแบบย่อ" iconSrc="/window.svg" />
           <CardContent>
             <div className="grid gap-3 text-sm">
-              <KV k="ชื่อ - สกุล" v={(form.prefix || form.name) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}` : "-"} />
+              <KV k="ประเภทเอกสาร" v={form.document_type || "-"} />
+              <KV k="ชื่อ - สกุล" v={(form.prefix || form.name) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}` : "-"} />    
               <KV k="เลขบัตรประชาชน" v={form.id_card || "-"} />
               <KV k="วันเกิด" v={form.date_of_birth || "-"} />
               <KV k="วัตถุประสงค์" v={form.purpose || "-"} />
@@ -300,7 +355,14 @@ export default function Home() {
         </Card>
       </main>
 
-  <footer className="border-t border-slate-200 dark:border-slate-800 mt-8">
+      {/* Toast container */}
+      {status && (
+        <div className={`fixed top-6 right-6 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${statusType === 'success' ? 'bg-emerald-100 border border-emerald-300 text-emerald-800' : 'bg-red-100 border border-red-300 text-red-800'}`}>
+          {status}
+        </div>
+      )}
+
+    <footer className="border-t border-slate-200 dark:border-slate-800 mt-8">
         <div className="max-w-6xl mx-auto px-6 py-6 text-xs text-zinc-500">
           © {new Date().getFullYear()} Records & Assessment
         </div>
