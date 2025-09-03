@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import AdminNavbar from "@/components/AdminNavbar";
 
 interface RequestRecord {
   id: string;
@@ -168,74 +169,84 @@ export default function RequestsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
-      {/* Header */}
-      <header className="w-full border-b border-cyan-200/50 dark:border-cyan-800/30 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
-                  รายการคำร้อง
-                </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">จัดการและดูรายการคำร้องของนักเรียน</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <span className="text-sm text-slate-600 dark:text-slate-300">สวัสดี, {session.username}</span>
-              </div>
-
-              <Link
-                href="/admin"
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                กลับแผงควบคุม
-              </Link>
-
-              <Link
-                href="/"
-                className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white/60 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm cursor-pointer"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                หน้าหลัก
-              </Link>
-
-              <form action="/api/logout" method="post">
-                <button className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm cursor-pointer">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  ออกจากระบบ
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AdminNavbar session={session} currentPage="requests" />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-6">
-          {/* Summary Card */}
-          <div className="rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">รายการคำร้องทั้งหมด</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">แสดงผลลัพธ์ {Math.min((data.page - 1) * data.limit + 1, data.total)}-{Math.min(data.page * data.limit, data.total)} จาก {data.total} รายการ</p>
+          {/* Page Header */}
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+              จัดการคำร้อง ปพ.1
+            </h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              แสดงผลลัพธ์ {Math.min((data.page - 1) * data.limit + 1, data.total)}-{Math.min(data.page * data.limit, data.total)} จาก {data.total} รายการ
+            </p>
+          </div>
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Requests Card */}
+            <div className="rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-blue-700 dark:text-blue-300">คำร้องทั้งหมด</h3>
+                  <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">{data.total}</p>
+                </div>
+                <div className="p-3 bg-blue-500 rounded-xl">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{data.total}</div>
-                <div className="text-sm text-slate-500 dark:text-slate-400">คำร้องทั้งหมด</div>
+            </div>
+
+            {/* Pending Requests Card */}
+            <div className="rounded-2xl border border-orange-200/50 dark:border-orange-700/50 bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950 dark:to-orange-900 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-orange-700 dark:text-orange-300">รอดำเนินการ</h3>
+                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-100 mt-1">
+                    {data.requests.filter(req => !req.status || req.status === 'pending').length}
+                  </p>
+                </div>
+                <div className="p-3 bg-orange-500 rounded-xl">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Completed Requests Card */}
+            <div className="rounded-2xl border border-green-200/50 dark:border-green-700/50 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-green-700 dark:text-green-300">สำเร็จ</h3>
+                  <p className="text-2xl font-bold text-green-900 dark:text-green-100 mt-1">
+                    {data.requests.filter(req => req.status === 'completed').length}
+                  </p>
+                </div>
+                <div className="p-3 bg-green-500 rounded-xl">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Cancelled Requests Card */}
+            <div className="rounded-2xl border border-red-200/50 dark:border-red-700/50 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 p-6 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-red-700 dark:text-red-300">ยกเลิก</h3>
+                  <p className="text-2xl font-bold text-red-900 dark:text-red-100 mt-1">
+                    {data.requests.filter(req => req.status === 'cancelled').length}
+                  </p>
+                </div>
+                <div className="p-3 bg-red-500 rounded-xl">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
@@ -324,8 +335,7 @@ export default function RequestsPage() {
                               ปพ.1
                             </button>
                             
-                            {(request.status === 'pending' || !request.status) && (
-                              <>
+                            <>
                                 <button
                                   onClick={() => handleUpdateStatus(request.id, 'completed')}
                                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-200 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-md hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors cursor-pointer shadow-sm"
@@ -346,8 +356,7 @@ export default function RequestsPage() {
                                   </svg>
                                   ยกเลิก
                                 </button>
-                              </>
-                            )}
+                            </>
                           </div>
                         </td>
                       </tr>
