@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, type ReactNode } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 
 // validate Thai national ID (13 digits with checksum)
 function isValidThaiID(s: string) {
@@ -170,13 +170,10 @@ export default function Home() {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="วันเกิด (YYYY-MM-DD) *" error={errors.date_of_birth}>
-                  <input
-                    name="date_of_birth"
+                <Field label="วันเกิด (ปฏิทินไทย) *" error={errors.date_of_birth}>
+                  <ThaiDatePicker
                     value={form.date_of_birth}
-                    onChange={handleChange}
-                    placeholder="2008-05-21"
-                    className={inputCls}
+                    onChange={(v) => setForm((s) => ({ ...s, date_of_birth: v }))}
                   />
                 </Field>
                 <Field label="วัตถุประสงค์ *" error={errors.purpose}>
@@ -325,3 +322,271 @@ function KV({ k, v }: { k: string; v: string }) {
 
 const inputCls =
   "w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm outline-none focus:ring-4 ring-blue-100 dark:ring-blue-900/40 focus:border-blue-600 transition";
+
+const headerChipCls =
+  "inline-flex items-center gap-1 rounded-md border border-zinc-300/70 dark:border-zinc-600/70 px-2 py-1 text-zinc-800 dark:text-zinc-200 bg-white/70 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition";
+
+// Thai calendar date picker (B.E. display, stores ISO yyyy-mm-dd)
+function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
+  const [open, setOpen] = useState(false);
+  type ViewMode = "date" | "month" | "year";
+  const [mode, setMode] = useState<ViewMode>("date");
+  const monthsTH = [
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม",
+  ];
+  const daysShortTH = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+
+  const today = new Date();
+  const parsed = value ? new Date(value + "T00:00:00") : null;
+  const [viewYear, setViewYear] = useState<number>(parsed ? parsed.getFullYear() : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState<number>(parsed ? parsed.getMonth() : today.getMonth());
+
+  function toISO(y: number, m: number, d: number) {
+    const mm = String(m + 1).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    return `${y}-${mm}-${dd}`;
+  }
+
+  function formatDisplay(val: string) {
+    if (!val) return "";
+    const d = new Date(val + "T00:00:00");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const be = d.getFullYear() + 543;
+    return `${dd}/${mm}/${be}`;
+  }
+
+  function buildDays(year: number, month: number) {
+    const first = new Date(year, month, 1);
+    const startDay = first.getDay(); // 0-6 Sun-Sat
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: Array<number | null> = [];
+    for (let i = 0; i < startDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    // pad to full weeks
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  }
+
+  function prevMonth() {
+    const m = viewMonth - 1;
+    if (m < 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else setViewMonth(m);
+  }
+  function nextMonth() {
+    const m = viewMonth + 1;
+    if (m > 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else setViewMonth(m);
+  }
+
+  function handlePrev() {
+    if (mode === "date") return prevMonth();
+    if (mode === "month") return setViewYear((y) => y - 1);
+    // year mode: page up by 12 years
+    return setViewYear((y) => y - 12);
+  }
+  function handleNext() {
+    if (mode === "date") return nextMonth();
+    if (mode === "month") return setViewYear((y) => y + 1);
+    // year mode: page down by 12 years
+    return setViewYear((y) => y + 12);
+  }
+
+  // close on outside click
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener("click", onDoc);
+    return () => document.removeEventListener("click", onDoc);
+  }, [open]);
+
+  const cells = buildDays(viewYear, viewMonth);
+  const selected = parsed;
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`${inputCls} text-left flex items-center justify-between`}
+      >
+        <span>{value ? formatDisplay(value) : "เลือกวันเกิด (พ.ศ.)"}</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" className="opacity-70">
+          <path fill="currentColor" d="M7 10l5 5 5-5z" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute z-50 mt-2 w-[320px] rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-200 dark:border-zinc-700">
+            <button type="button" onClick={handlePrev} className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">‹</button>
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <button
+                type="button"
+                className={headerChipCls}
+                onClick={() => setMode("month")}
+                title="เลือกเดือน"
+              >
+                <span>{monthsTH[viewMonth]}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-70">
+                  <path fill="currentColor" d="M7 10l5 5 5-5z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={headerChipCls}
+                onClick={() => setMode("year")}
+                title="เลือกปี (พ.ศ.)"
+              >
+                <span>{viewYear + 543}</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" className="opacity-70">
+                  <path fill="currentColor" d="M7 10l5 5 5-5z" />
+                </svg>
+              </button>
+            </div>
+            <button type="button" onClick={handleNext} className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">›</button>
+          </div>
+
+          {mode === "date" && (
+            <div className="grid grid-cols-7 gap-1 p-3 text-center text-xs text-zinc-500">
+              {daysShortTH.map((d) => (
+                <div key={d} className="py-1 font-medium">
+                  {d}
+                </div>
+              ))}
+              {cells.map((d, idx) => {
+                const isToday = d
+                  ? today.getFullYear() === viewYear &&
+                    today.getMonth() === viewMonth &&
+                    today.getDate() === d
+                  : false;
+                const isSelected = d && selected &&
+                  selected.getFullYear() === viewYear &&
+                  selected.getMonth() === viewMonth &&
+                  selected.getDate() === d;
+                if (d === null)
+                  return <div key={idx} className="py-2" />;
+                return (
+                  <button
+                    type="button"
+                    key={idx}
+                    onClick={() => {
+                      const iso = toISO(viewYear, viewMonth, d);
+                      onChange(iso);
+                      setOpen(false);
+                    }}
+                    className={
+                      "py-2 rounded text-sm " +
+                      (isSelected
+                        ? "bg-blue-600 text-white"
+                        : isToday
+                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30"
+                        : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                    }
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {mode === "month" && (
+            <div className="grid grid-cols-3 gap-2 p-3">
+              {monthsTH.map((m, i) => {
+                const isSel = i === viewMonth;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => {
+                      setViewMonth(i);
+                      setMode("date");
+                      setOpen(true);
+                    }}
+                    className={
+                      "py-2 px-2 rounded text-sm text-center " +
+                      (isSel ? "bg-blue-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                    }
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {mode === "year" && (() => {
+            const start = Math.floor(viewYear / 12) * 12;
+            const years = Array.from({ length: 12 }, (_, i) => start + i);
+            return (
+              <div className="grid grid-cols-3 gap-2 p-3">
+                {years.map((y) => {
+                  const isSel = y === viewYear;
+                  return (
+                    <button
+                      key={y}
+                      type="button"
+                      onClick={() => {
+                        setViewYear(y);
+                        setMode("month");
+                        setOpen(true);
+                      }}
+                      className={
+                        "py-2 px-2 rounded text-sm text-center " +
+                        (isSel ? "bg-blue-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                      }
+                    >
+                      {y + 543}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          <div className="flex justify-between items-center px-3 pb-3">
+            <button
+              type="button"
+              className="text-xs text-zinc-500 hover:underline"
+              onClick={() => {
+                setViewYear(today.getFullYear());
+                setViewMonth(today.getMonth());
+              }}
+            >
+              วันนี้
+            </button>
+            {value && (
+              <button
+                type="button"
+                className="text-xs text-red-600 hover:underline"
+                onClick={() => onChange("")}
+              >
+                ล้างวันที่
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
