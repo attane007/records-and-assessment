@@ -29,8 +29,8 @@ type FormState = {
 
 export default function Home() {
   const [form, setForm] = useState<FormState>({
-  name: "",
-  prefix: "",
+    name: "",
+    prefix: "",
     id_card: "",
     date_of_birth: "",
     purpose: "",
@@ -44,12 +44,13 @@ export default function Home() {
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) {
     const { name, value } = e.target;
-  // keep id_card numeric-only
-  const nextVal = name === "id_card" ? value.replace(/\D/g, "") : value;
-  setForm((s) => ({ ...s, [name]: nextVal }));
-    setErrors((e) => ({ ...e, [name]: "" }));
+    const nextVal = name === "id_card" ? value.replace(/\D/g, "") : value;
+    setForm((s) => ({ ...s, [name]: nextVal }));
+    setErrors((er) => ({ ...er, [name]: "" }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -117,12 +118,12 @@ export default function Home() {
   }
 
   return (
-    <div className="font-sans min-h-screen bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950 dark:to-black text-foreground">
-      <header className="w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/60 backdrop-blur">
+  <div className="font-sans min-h-screen bg-[radial-gradient(1200px_400px_at_50%_-50%,#93c5fd,transparent)] bg-slate-50 dark:bg-slate-950 text-foreground">
+  <header className="w-full border-b border-cyan-300 dark:border-cyan-900 bg-white/70 dark:bg-slate-900/60 backdrop-blur">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
           <Image className="dark:invert" src="/next.svg" alt="Next.js" width={110} height={24} />
-          <span className="text-zinc-400">|</span>
-          <h1 className="text-base sm:text-lg font-semibold tracking-tight">บันทึกและแบบประเมิน - Student Records</h1>
+          <span className="text-cyan-600/70">|</span>
+          <h1 className="text-base sm:text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">บันทึกและแบบประเมิน - Student Records</h1>
         </div>
       </header>
 
@@ -209,7 +210,9 @@ export default function Home() {
               </div>
 
               {status && (
-                <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-4 py-3 text-sm">
+                <div
+                  className={`rounded-lg px-4 py-3 text-sm ${statusClasses(status)}`}
+                >
                   {status}
                 </div>
               )}
@@ -218,7 +221,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex items-center justify-center rounded-lg bg-blue-600 text-white px-4 py-2 text-sm font-medium shadow hover:bg-blue-700 disabled:opacity-60"
+                  className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60"
                 >
                   {loading ? "กำลังบันทึก..." : "บันทึกข้อมูล"}
                 </button>
@@ -239,7 +242,7 @@ export default function Home() {
                     setErrors({});
                     setStatus(null);
                   }}
-                  className="inline-flex items-center justify-center rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60"
                 >
                   ล้างฟอร์ม
                 </button>
@@ -256,7 +259,7 @@ export default function Home() {
               <KV k="เลขบัตรประชาชน" v={form.id_card || "-"} />
               <KV k="วันเกิด" v={form.date_of_birth || "-"} />
               <KV k="วัตถุประสงค์" v={form.purpose || "-"} />
-              <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1" />
+              <div className="h-px bg-cyan-200 dark:bg-cyan-900 my-1" />
               <KV k="ชั้น/ห้อง" v={`${form.class || "-"}/${form.room || "-"}`} />
               <KV k="ปีการศึกษา" v={form.academic_year || "-"} />
               <KV k="บิดา" v={form.father_name || "-"} />
@@ -266,7 +269,7 @@ export default function Home() {
         </Card>
       </main>
 
-      <footer className="border-t border-zinc-200 dark:border-zinc-800 mt-8">
+  <footer className="border-t border-slate-200 dark:border-slate-800 mt-8">
         <div className="max-w-6xl mx-auto px-6 py-6 text-xs text-zinc-500">
           © {new Date().getFullYear()} Records & Assessment
         </div>
@@ -278,7 +281,7 @@ export default function Home() {
 // UI primitives
 function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-2xl ${className}`}>
+  <section className={`bg-white/90 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-lg rounded-2xl ${className}`}>
       {children}
     </section>
   );
@@ -286,12 +289,12 @@ function Card({ children, className = "" }: { children: ReactNode; className?: s
 
 function CardHeader({ title, description, iconSrc }: { title: string; description?: string; iconSrc?: string }) {
   return (
-    <div className="px-5 pt-5 pb-3 border-b border-zinc-200 dark:border-zinc-800">
+  <div className="px-5 pt-5 pb-3 border-b border-cyan-500 dark:border-cyan-900 bg-gradient-to-r from-cyan-300 via-sky-400 to-indigo-400 dark:from-slate-900 dark:to-slate-900/40">
       <div className="flex items-center gap-3">
         {iconSrc ? <Image aria-hidden src={iconSrc} alt="" width={20} height={20} className="dark:invert" /> : null}
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h2>
       </div>
-      {description ? <p className="mt-1 text-sm text-zinc-500">{description}</p> : null}
+      {description ? <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{description}</p> : null}
     </div>
   );
 }
@@ -305,7 +308,7 @@ function Field({ label, children, help, error }: { label: string; children: Reac
     <label className="flex flex-col">
       <span className="text-sm text-zinc-700 dark:text-zinc-200">{label}</span>
       <div className="mt-1">{children}</div>
-      {help && !error ? <span className="mt-1 text-xs text-zinc-500">{help}</span> : null}
+      {help && !error ? <span className="mt-1 text-xs text-slate-500 dark:text-slate-400">{help}</span> : null}
       {error ? <span className="mt-1 text-xs text-red-600">{error}</span> : null}
     </label>
   );
@@ -321,10 +324,18 @@ function KV({ k, v }: { k: string; v: string }) {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm outline-none focus:ring-4 ring-blue-100 dark:ring-blue-900/40 focus:border-blue-600 transition";
+  "w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:ring-2 ring-cyan-300 dark:ring-cyan-800/50 focus:border-cyan-700 transition";
 
 const headerChipCls =
-  "inline-flex items-center gap-1 rounded-md border border-zinc-300/70 dark:border-zinc-600/70 px-2 py-1 text-zinc-800 dark:text-zinc-200 bg-white/70 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition";
+  "inline-flex items-center gap-1 rounded-md border border-cyan-500/70 dark:border-cyan-700/70 px-2 py-1 text-cyan-800 dark:text-cyan-200 bg-cyan-100/70 dark:bg-cyan-900/30 hover:bg-cyan-200/80 dark:hover:bg-cyan-900/50 transition";
+
+function statusClasses(msg: string) {
+  const lower = msg.toLowerCase();
+  const isError = lower.includes("error") || lower.includes("ผิดพลาด") || lower.includes("unexpected");
+  return isError
+  ? "border border-red-300 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+  : "border border-cyan-300 bg-cyan-100 text-cyan-800 dark:border-cyan-900 dark:bg-cyan-950/30 dark:text-cyan-300";
+}
 
 // Thai calendar date picker (B.E. display, stores ISO yyyy-mm-dd)
 function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
@@ -498,9 +509,9 @@ function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: st
                     className={
                       "py-2 rounded text-sm " +
                       (isSelected
-                        ? "bg-blue-600 text-white"
+                        ? "bg-cyan-600 text-white"
                         : isToday
-                        ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30"
+                        ? "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30"
                         : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
                     }
                   >
@@ -526,7 +537,7 @@ function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: st
                     }}
                     className={
                       "py-2 px-2 rounded text-sm text-center " +
-                      (isSel ? "bg-blue-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                      (isSel ? "bg-cyan-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
                     }
                   >
                     {m}
@@ -554,7 +565,7 @@ function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: st
                       }}
                       className={
                         "py-2 px-2 rounded text-sm text-center " +
-                        (isSel ? "bg-blue-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
+                        (isSel ? "bg-cyan-600 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800")
                       }
                     >
                       {y + 543}
