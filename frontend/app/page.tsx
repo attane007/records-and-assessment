@@ -19,6 +19,7 @@ type FormState = {
   name: string;
   prefix?: string;
   id_card: string;
+  student_id?: string;
   date_of_birth: string;
   purpose: string;
   document_type?: string;
@@ -34,6 +35,7 @@ export default function Home() {
     name: "",
     prefix: "",
     id_card: "",
+    student_id: "",
     date_of_birth: "",
     purpose: "",
   document_type: "",
@@ -221,6 +223,16 @@ export default function Home() {
                       className={inputCls}
                     />
                   </Field>
+
+                  <Field label="รหัสนักเรียน" help="ไม่บังคับกรอก">
+                    <input
+                      name="student_id"
+                      value={form.student_id}
+                      onChange={handleChange}
+                      placeholder="เช่น 12345"
+                      className={inputCls}
+                    />
+                  </Field>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -290,7 +302,9 @@ export default function Home() {
                     onClick={() => {
                       setForm({
                         name: "",
+                        prefix: "",
                         id_card: "",
+                        student_id: "",
                         date_of_birth: "",
                         purpose: "",
                         document_type: "",
@@ -343,6 +357,7 @@ export default function Home() {
               <KV k="ประเภทเอกสาร" v={form.document_type || "-"} />
               <KV k="ชื่อ - สกุล" v={(form.prefix || form.name) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}` : "-"} />    
               <KV k="เลขบัตรประชาชน" v={form.id_card || "-"} />
+              <KV k="รหัสนักเรียน" v={form.student_id || "-"} />
               <KV k="วันเกิด" v={form.date_of_birth || "-"} />
               <KV k="วัตถุประสงค์" v={form.purpose || "-"} />
               <div className="h-px bg-cyan-200 dark:bg-cyan-900 my-1" />

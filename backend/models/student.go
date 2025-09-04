@@ -6,6 +6,7 @@ type StudentData struct {
 	Prefix       string `json:"prefix" bson:"prefix" binding:"required"`
 	DocumentType string `json:"document_type" bson:"document_type" binding:"required"`
 	IDCard       string `json:"id_card" bson:"id_card" binding:"required,idcard"`
+	StudentID    string `json:"student_id" bson:"student_id"`
 	DateOfBirth  string `json:"date_of_birth" bson:"date_of_birth" binding:"required"`
 	Purpose      string `json:"purpose" bson:"purpose" binding:"required"`
 	Status       string `json:"status" bson:"status"` // pending, completed, cancelled

@@ -17,6 +17,7 @@ func SaveStudent(ctx context.Context, coll *mongo.Collection, payload models.Stu
 		"document_type": payload.DocumentType,
 		"name":          payload.Name,
 		"id_card":       payload.IDCard,
+		"student_id":    payload.StudentID,
 		"class":         payload.Class,
 		"room":          payload.Room,
 		"academic_year": payload.AcademicYear,
@@ -126,6 +127,7 @@ type RequestRecord struct {
 	Name         string      `json:"name" bson:"name"`
 	DocumentType string      `json:"document_type" bson:"document_type"`
 	IDCard       string      `json:"id_card" bson:"id_card"`
+	StudentID    string      `json:"student_id" bson:"student_id"`
 	DateOfBirth  string      `json:"date_of_birth" bson:"date_of_birth"`
 	Class        string      `json:"class" bson:"class"`
 	Room         string      `json:"room" bson:"room"`

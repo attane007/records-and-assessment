@@ -210,6 +210,10 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	valueClassW := classCellW - labelClassW
 	pdf.CellFormat(labelClassW, 6, "ชั้น: _______", "", 0, "L", false, 0, "")
 	pdf.CellFormat(valueClassW, 6, classVal, "", 1, "L", false, 0, "")
+
+	pdf.SetY(pageMargins.Top + 97)
+	pdf.CellFormat(labelRightW, 6, "รหัสนักเรียน:_________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(valueRightW+classCellW, 6, request.StudentID, "", 1, "L", false, 0, "")
 	pdf.Ln(6)
 
 	// Request Details
