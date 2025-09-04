@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jung-kurt/gofpdf"
 )
@@ -211,38 +212,34 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.CellFormat(labelClassW, 6, "ชั้น: _______", "", 0, "L", false, 0, "")
 	pdf.CellFormat(valueClassW, 6, classVal, "", 1, "L", false, 0, "")
 
-	pdf.SetY(pageMargins.Top + 97)
-	pdf.CellFormat(labelRightW, 6, "รหัสนักเรียน:_________________________", "", 0, "L", false, 0, "")
-	pdf.CellFormat(valueRightW+classCellW, 6, request.StudentID, "", 1, "L", false, 0, "")
-	pdf.Ln(6)
+	pdf.SetY(pageMargins.Top + 100)
+	pdf.SetX(pageMargins.Left)
+	pdf.CellFormat(15, 6, "รหัสนักเรียน:______________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 6, request.StudentID, "", 0, "C", false, 0, "")
+	pdf.CellFormat(15, 6, "ปีการศึกษา: _______________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(30, 6, request.AcademicYear, "", 0, "C", false, 0, "")
+	// Parse DateOfBirth
+	dob, err := time.Parse("2006-01-02", request.DateOfBirth)
+	if err != nil {
+		dob = time.Time{}
+	}
+	birthDay := dob.Day()
+	monthStr := ""
+	if dob.Month() >= 1 && dob.Month() <= 12 {
+		monthStr = thaiMonths[dob.Month()-1]
+	}
+	birthYear := dob.Year() + 543
+	pdf.CellFormat(13, 6, "เกิดวันที่: _____", "", 0, "L", false, 0, "")
+	pdf.CellFormat(10, 6, fmt.Sprintf("%d", birthDay), "", 0, "C", false, 0, "")
+	pdf.CellFormat(13, 6, "เดือน: _______________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(24, 6, monthStr, "", 0, "C", false, 0, "")
+	pdf.CellFormat(6, 6, "พ.ศ.: ________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(20, 6, fmt.Sprintf("%d", birthYear), "", 1, "C", false, 0, "")
+	pdf.Ln(5)
 
-	// Request Details
-	pdf.SetFont(thaiFontFamily, "B", 12)
-	pdf.Cell(50, 8, "Request Details")
-	pdf.Ln(10)
-
-	pdf.SetFont(thaiFontFamily, "", 10)
-	pdf.Cell(40, 6, "Document Type: ")
-	pdf.Cell(100, 6, request.DocumentType)
-	pdf.Ln(6)
-
-	pdf.Cell(40, 6, "Purpose: ")
-	pdf.MultiCell(150, 6, request.Purpose, "", "", false)
-	pdf.Ln(8)
-
-	// Date
-	pdf.Cell(40, 6, "Request Date: ")
-	pdf.Cell(100, 6, request.CreatedAt.Format("2006-01-02 15:04:05"))
-	pdf.Ln(15)
-
-	// Signature area
-	pdf.SetFont("Arial", "", 10)
-	pdf.Cell(95, 6, "Applicant Signature: _________________")
-	pdf.Cell(95, 6, "Date: _________________")
-	pdf.Ln(15)
-
-	pdf.Cell(95, 6, "Officer Signature: _________________")
-	pdf.Cell(95, 6, "Date: _________________")
+	pdf.CellFormat(printableW/2, 6, "บิดาชื่อ: ___________________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(24, 6, request.FatherName, "", 0, "C", false, 0, "")
+	pdf.CellFormat(13, 6, "มารดาชื่อ: ________________________________________", "", 0, "L", false, 0, "")
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
