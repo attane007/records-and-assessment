@@ -18,7 +18,7 @@ import (
 )
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -131,8 +131,15 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection) {
 			return
 		}
 
-		// Generate PDF via service
-		pdfBytes, err := services.GeneratePDF(request)
+		// Try to load official names from DB, fall back to dummy defaults
+		registrarName, directorName, offErr := services.GetOfficialsFromDB(ctx, officialsColl)
+		if offErr != nil || registrarName == "" || directorName == "" {
+			// fallback to env/defaults
+			registrarName, directorName = services.GetOfficials()
+		}
+
+		// Generate PDF via service (pass official names)
+		pdfBytes, err := services.GeneratePDF(request, registrarName, directorName)
 		if err != nil {
 			log.Printf("pdf generation error for id %s: %v", idStr, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate PDF"})

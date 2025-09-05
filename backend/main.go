@@ -38,6 +38,8 @@ func main() {
 	client := initMongo(cfg.MongoURI)
 	// use database from DB_NAME and collection `students`
 	mongoColl = client.Database(cfg.DBName).Collection("students")
+	// use a dedicated collection for school officials (registrar/director)
+	mongoCollOfficials := client.Database(cfg.DBName).Collection("officials")
 
 	// register custom validator for idcard (13 digits)
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -47,7 +49,8 @@ func main() {
 	r := gin.Default()
 
 	// Register routes from handlers package (keeps main.go minimal)
-	handlers.RegisterRoutes(r, mongoColl)
+	// pass both the students collection and the officials collection
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }

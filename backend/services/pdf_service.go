@@ -13,7 +13,9 @@ import (
 )
 
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
-func GeneratePDF(request *RequestRecord) ([]byte, error) {
+// GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
+// registrarName and directorName are the names to print on signature lines.
+func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 
 	// Page margin variables (left, right, top, bottom)
@@ -188,7 +190,7 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	// Split into two cells so filling name and ID won't shift each other
 	leftWidth := printableW * 0.45
 	rightWidth := printableW - leftWidth
-	name := strings.TrimSpace(request.Prefix + " " + request.Name)
+	name := strings.TrimSpace(request.Prefix + request.Name)
 	// Left: split into label cell and value cell
 	labelLeftW := leftWidth * 0.2
 	valueLeftW := leftWidth - labelLeftW
@@ -237,9 +239,101 @@ func GeneratePDF(request *RequestRecord) ([]byte, error) {
 	pdf.CellFormat(20, 6, fmt.Sprintf("%d", birthYear), "", 1, "C", false, 0, "")
 	pdf.Ln(5)
 
-	pdf.CellFormat(printableW/2, 6, "บิดาชื่อ: ___________________________________________", "", 0, "L", false, 0, "")
-	pdf.CellFormat(24, 6, request.FatherName, "", 0, "C", false, 0, "")
-	pdf.CellFormat(13, 6, "มารดาชื่อ: ________________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(15, 6, "บิดาชื่อ: ___________________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(72, 6, request.FatherName, "", 0, "C", false, 0, "")
+	pdf.CellFormat(15, 6, "มารดาชื่อ: ________________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(72, 6, request.MotherName, "", 0, "C", false, 0, "")
+	pdf.Ln(10)
+
+	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
+		pdf.CellFormat(printableW, 6, "มีความประสงค์จะขอใบรับรองผลการศึกษา(ปพ.7) จำนวน 1 ฉบับ", "", 0, "L", false, 0, "")
+	} else {
+		pdf.CellFormat(printableW, 6, "มีความประสงค์จะขอใบระเบียนแสดงผลการเรียน(รบ.1/ปพ.1) จำนวน 1 ฉบับ", "", 0, "L", false, 0, "")
+	}
+	pdf.Ln(10)
+
+	pdf.CellFormat(10, 6, "เพื่อ: _______________________________________________________________________________________________", "", 0, "L", false, 0, "")
+	pdf.CellFormat(160, 6, request.Purpose, "", 0, "L", false, 0, "")
+	pdf.Ln(10)
+
+	pdf.SetX(pageMargins.Left + 9)
+	pdf.CellFormat(10, 6, "ทั้งนี้  ข้าพเจ้าได้แนบเอกสารหลักฐานต่างๆ มาด้วยแล้ว", "", 0, "L", false, 0, "")
+	pdf.Ln(7)
+	pdf.SetX(pageMargins.Left + 18)
+	pdf.CellFormat(10, 6, "1. รูปถ่ายขนาด 1.5 นิ้ว (ถ่ายไว้ไม่เกิน 6 เดือน)    จำนวน 2 รูป", "", 0, "L", false, 0, "")
+	pdf.Ln(7)
+	pdf.SetX(pageMargins.Left + 18)
+	pdf.CellFormat(10, 6, "2. สำเนาบัตรประชาชน (กรณีเป็นศิษย์เก่า)", "", 0, "L", false, 0, "")
+	pdf.Ln(7)
+	pdf.SetX(pageMargins.Left + 18)
+	pdf.CellFormat(10, 6, "3. ใบแจ้งความเอกสารหาย (กรณีหายหรือชำรุด)", "", 0, "L", false, 0, "")
+
+	pdf.Ln(10)
+	pdf.SetX(pageMargins.Left + 9)
+	pdf.CellFormat(10, 6, "จึงเรียนมาเพื่อโปรดพิจารณา", "", 0, "L", false, 0, "")
+	pdf.Ln(7)
+	pdf.SetX(pageMargins.Left + 120)
+	pdf.CellFormat(10, 6, "ขอแสดงความนับถือ", "", 0, "C", false, 0, "")
+	pdf.Ln(14)
+	pdf.SetX(pageMargins.Left + 120)
+	pdf.CellFormat(10, 6, "ลงชื่อ ______________________________", "", 0, "C", false, 0, "")
+	pdf.Ln(7)
+	pdf.SetX(pageMargins.Left + 120)
+	// use provided name for requester
+	pdf.CellFormat(10, 6, fmt.Sprintf("( %s )", name), "", 0, "C", false, 0, "")
+	pdf.Ln(7)
+
+	// Draw a thin horizontal line beneath the printed name (signature line)
+	// y position a few mm below the current Y to sit under the text
+	yLine := pdf.GetY() + 4
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetLineWidth(0.2)
+	pdf.Line(pageMargins.Left, yLine, pageMargins.Left+printableW, yLine)
+	pdf.Ln(7)
+
+	// Render the registrar comment label in bold using the current font size
+	curFontSize, _ := pdf.GetFontSize()
+	pdf.SetFont(thaiFontFamily, "B", curFontSize)
+	pdf.CellFormat(printableW/2, 6, "ความเห็นนายทะเบียน", "", 0, "L", false, 0, "")
+	// pdf.CellFormat(40, 6, "", "1", 0, "L", false, 0, "")
+	pdf.CellFormat(10, 6, "ความเห็นผู้อำนวยการ", "", 0, "L", false, 0, "")
+	// restore previous font style
+	pdf.SetFont(thaiFontFamily, "", curFontSize)
+	pdf.Ln(10)
+	pdf.SetX(pageMargins.Left + 9)
+	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
+
+	xRef := pdf.GetX()
+	yRef := pdf.GetY() + 3.0 // center vertically in the 6mm-high cell
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetLineWidth(0.3)
+	// draw circle slightly offset from current X
+	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
+	pdf.Circle(xRef, yRef, 2.5, "D")
+	pdf.CellFormat(25, 6, "อนุญาติ", "", 0, "L", false, 0, "")
+	xRef = pdf.GetX()
+	pdf.Circle(xRef-5, yRef, 2.5, "D")
+	pdf.CellFormat(40, 6, "ไม่อนุญาติ", "", 0, "L", false, 0, "")
+
+	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
+	xRef = pdf.GetX()
+	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
+	pdf.Circle(xRef, yRef, 2.5, "D")
+	pdf.CellFormat(25, 6, "อนุญาติ", "", 0, "L", false, 0, "")
+	xRef = pdf.GetX()
+	pdf.Circle(xRef-5, yRef, 2.5, "D")
+	pdf.CellFormat(10, 6, "ไม่อนุญาติ", "", 0, "L", false, 0, "")
+
+	pdf.Ln(15)
+	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
+	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
+	pdf.Ln(7)
+	// registrarName and directorName are provided by caller (handler did DB lookup and fallback)
+	pdf.CellFormat(printableW/2, 6, fmt.Sprintf("( %s )", registrarName), "", 0, "C", false, 0, "")
+	pdf.CellFormat(printableW/2, 6, fmt.Sprintf("( %s )", directorName), "", 0, "C", false, 0, "")
+	pdf.Ln(7)
+	pdf.CellFormat(printableW/2, 6, "___/___/___", "", 0, "C", false, 0, "")
+	pdf.CellFormat(printableW/2, 6, "___/___/___", "", 0, "C", false, 0, "")
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
