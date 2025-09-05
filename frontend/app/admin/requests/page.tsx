@@ -127,42 +127,27 @@ export default function RequestsPage() {
       const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
       const pdfEndpoint = `${backendURL}/api/pdf/${requestId}`;
 
-      // First try: open the backend URL directly so the browser can honor
-      // Content-Disposition and render the PDF inline.
-      const opened = window.open(pdfEndpoint, '_blank', 'noopener,noreferrer');
-      if (opened) {
+      // Always fetch as blob and force a download (no new tab)
+      const response = await fetch(pdfEndpoint, { method: 'GET', cache: 'no-store' });
+      if (!response.ok) {
+        alert('ไม่สามารถสร้าง PDF ได้ กรุณาลองใหม่อีกครั้ง');
         return;
       }
 
-      // If popup blocked, fallback to fetching the PDF as a blob and
-      // opening a new window with an iframe that points to the blob URL.
-      const response = await fetch(pdfEndpoint, { method: 'GET' });
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
 
-        const newWin = window.open('', '_blank', 'noopener,noreferrer');
-        if (newWin && newWin.document) {
-          newWin.document.title = `ปพ.1 - ${requestId}`;
-          newWin.document.body.style.margin = '0';
-          newWin.document.body.innerHTML = `<iframe src="${url}" style="border:0; width:100%; height:100vh"></iframe>`;
-        } else {
-          // As last-resort fallback: download
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `request-${requestId}.pdf`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `request-${requestId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-        // Revoke the object URL after a short delay to ensure the browser had time to load it.
-        setTimeout(() => {
-          try { window.URL.revokeObjectURL(url); } catch { /* ignore */ }
-        }, 60 * 1000);
-      } else {
-        alert('ไม่สามารถสร้าง PDF ได้ กรุณาลองใหม่อีกครั้ง');
-      }
+      // Revoke the object URL shortly after triggering the download
+      setTimeout(() => {
+        try { window.URL.revokeObjectURL(url); } catch { /* ignore */ }
+      }, 5000);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('เกิดข้อผิดพลาดในการสร้าง PDF');

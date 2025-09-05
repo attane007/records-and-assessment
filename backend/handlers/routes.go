@@ -147,8 +147,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		}
 
 		c.Header("Content-Type", "application/pdf")
-		// Serve PDF inline so browsers can render it in a new tab instead of forcing download
-		c.Header("Content-Disposition", "inline; filename=request-"+idStr+".pdf")
+		// Force file download instead of inline view
+		c.Header("Content-Disposition", "attachment; filename=request-"+idStr+".pdf")
 		if _, werr := c.Writer.Write(pdfBytes); werr != nil {
 			log.Printf("failed to write PDF response for id %s: %v", idStr, werr)
 		}
