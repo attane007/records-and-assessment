@@ -5,9 +5,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     ports:
-      - "3000:3000"
+    - "3003:3000"
     networks:
       - frontend_net
     env_file: ./.env
