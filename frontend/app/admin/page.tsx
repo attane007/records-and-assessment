@@ -135,7 +135,7 @@ export default async function AdminPage() {
                     </svg>
                   </div>
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">{stats.by_year.at(-1)?.year ?? "-"}</div>
+                    <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">{stats.by_year.at(-1) ? stats.by_year.at(-1)!.year + 543 : "-"}</div>
                   </div>
                 </div>
                 <div className="text-sm font-medium text-slate-600 dark:text-slate-300">ปีล่าสุด</div>
@@ -154,7 +154,7 @@ export default async function AdminPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-                      {stats.by_month.length ? `${stats.by_month.at(-1)!.year}/${String(stats.by_month.at(-1)!.month).padStart(2, "0")}` : "-"}
+                      {stats.by_month.length ? `${stats.by_month.at(-1)!.year + 543}/${String(stats.by_month.at(-1)!.month).padStart(2, "0")}` : "-"}
                     </div>
                   </div>
                 </div>
@@ -183,7 +183,7 @@ export default async function AdminPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-slate-500 dark:text-slate-400 text-sm">
-                        <th className="py-3 pr-4 font-medium">ปี (ค.ศ.)</th>
+                        <th className="py-3 pr-4 font-medium">ปี (พ.ศ.)</th>
                         <th className="py-3 pr-4 font-medium">จำนวน</th>
                         <th className="py-3 font-medium">แนวโน้ม</th>
                       </tr>
@@ -191,7 +191,7 @@ export default async function AdminPage() {
                     <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/50">
                       {stats.by_year.map((y, index) => (
                         <tr key={y.year} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="py-4 pr-4 font-medium text-slate-900 dark:text-slate-100">{y.year}</td>
+                          <td className="py-4 pr-4 font-medium text-slate-900 dark:text-slate-100">{y.year + 543}</td>
                           <td className="py-4 pr-4">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-slate-900 dark:text-slate-100">{y.count}</span>
@@ -259,7 +259,7 @@ export default async function AdminPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-slate-500 dark:text-slate-400 text-sm">
-                        <th className="py-3 pr-4 font-medium">ปี</th>
+                        <th className="py-3 pr-4 font-medium">ปี (พ.ศ.)</th>
                         <th className="py-3 pr-4 font-medium">เดือน</th>
                         <th className="py-3 font-medium">จำนวน</th>
                       </tr>
@@ -267,7 +267,7 @@ export default async function AdminPage() {
                     <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/50">
                       {stats.by_month.slice(-6).map((m) => (
                         <tr key={`${m.year}-${m.month}`} className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                          <td className="py-4 pr-4 font-medium text-slate-900 dark:text-slate-100">{m.year}</td>
+                          <td className="py-4 pr-4 font-medium text-slate-900 dark:text-slate-100">{m.year + 543}</td>
                           <td className="py-4 pr-4">
                             <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                               {String(m.month).padStart(2, "0")}
