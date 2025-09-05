@@ -18,7 +18,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: always
     networks:
       - backend_net
     env_file: ./.env
