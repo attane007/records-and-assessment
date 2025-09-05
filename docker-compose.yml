@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - frontend_net
+    env_file: ./.env
+    environment:
+      PORT: "3000"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - backend_net
+    env_file: ./.env
+    environment:
+      MONGO_URI: "${MONGO_URI}"
+      DB_NAME: "${DB_NAME}"
+      ADMIN_USER: "${ADMIN_USER}"
+      ADMIN_PASS: "${ADMIN_PASS}"
+      AUTH_SECRET: "${AUTH_SECRET}"
+
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge
+    internal: true
