@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     networks:
-      - backend_net
+      - frontend_net
     env_file: ./.env
     environment:
       MONGO_URI: "${MONGO_URI}"
@@ -32,6 +32,4 @@ services:
 networks:
   frontend_net:
     driver: bridge
-  backend_net:
-    driver: bridge
-    internal: true
+  # backend_net removed because no services require it; backend and frontend share frontend_net
