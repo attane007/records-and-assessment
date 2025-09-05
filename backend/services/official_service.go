@@ -7,6 +7,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // GetOfficials returns default dummy names. Do NOT read from .env here.
@@ -34,4 +35,24 @@ func GetOfficialsFromDB(ctx context.Context, coll *mongo.Collection) (registrar 
 		return "", "", nil
 	}
 	return doc.RegistrarName, doc.DirectorName, nil
+}
+
+// SaveOfficialsToDB saves or updates the officials data in the database.
+// It uses upsert to create the document if it doesn't exist or update if it does.
+func SaveOfficialsToDB(ctx context.Context, coll *mongo.Collection, registrarName, directorName string) error {
+	if coll == nil {
+		return nil // No collection to save to
+	}
+
+	filter := bson.M{"_id": "school_officials"}
+	update := bson.M{
+		"$set": bson.M{
+			"registrar_name": registrarName,
+			"director_name":  directorName,
+		},
+	}
+
+	_, err := coll.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+
+	return err
 }

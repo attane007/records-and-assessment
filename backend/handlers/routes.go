@@ -185,4 +185,47 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		c.JSON(http.StatusOK, gin.H{"message": "status updated successfully"})
 	})
+
+	// GET /api/officials - get current officials data
+	r.GET("/api/officials", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		registrarName, directorName, err := services.GetOfficialsFromDB(ctx, officialsColl)
+		if err != nil || (registrarName == "" && directorName == "") {
+			// Return default values if no data found
+			registrarName, directorName = services.GetOfficials()
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"registrar_name": registrarName,
+			"director_name":  directorName,
+		})
+	})
+
+	// POST /api/officials - update officials data
+	r.POST("/api/officials", func(c *gin.Context) {
+		var payload models.Official
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid data format"})
+			return
+		}
+
+		if payload.RegistrarName == "" || payload.DirectorName == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "both registrar_name and director_name are required"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		err := services.SaveOfficialsToDB(ctx, officialsColl, payload.RegistrarName, payload.DirectorName)
+		if err != nil {
+			log.Printf("Error saving officials: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save officials data"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "officials data saved successfully"})
+	})
 }
