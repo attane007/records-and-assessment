@@ -24,4 +24,5 @@ body {
 /* subtle green accents */
 ::selection { background: var(--brand-50); }
 
-a { color: var(--brand); }
+/* Only style plain anchors (without classes) so utility classes like .text-white are not overridden */
+a:not([class]) { color: var(--brand); }
