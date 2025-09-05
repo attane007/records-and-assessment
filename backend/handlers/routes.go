@@ -18,7 +18,7 @@ import (
 )
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -227,5 +227,92 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "officials data saved successfully"})
+	})
+
+	// Initialize admin service
+	adminService := services.NewAdminService(adminColl)
+
+	// POST /api/admin/verify - verify admin credentials for login
+	r.POST("/api/admin/verify", func(c *gin.Context) {
+		var credentials struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+
+		if err := c.ShouldBindJSON(&credentials); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid data format"})
+			return
+		}
+
+		if credentials.Username == "" || credentials.Password == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "username and password are required"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Verify credentials
+		isValid, err := adminService.VerifyPassword(ctx, credentials.Username, credentials.Password)
+		if err != nil {
+			log.Printf("Error verifying credentials: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify credentials"})
+			return
+		}
+
+		if !isValid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "credentials verified successfully"})
+	})
+
+	// POST /api/admin/change-password - change admin password
+	r.POST("/api/admin/change-password", func(c *gin.Context) {
+		var payload models.ChangePasswordRequest
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			// try to translate validation errors into readable messages
+			if errs, ok := err.(validator.ValidationErrors); ok {
+				messages := utils.ParseValidationErrors(errs, payload)
+				c.JSON(http.StatusBadRequest, gin.H{"errors": messages})
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid data format"})
+			return
+		}
+
+		// For now, we'll use the default admin username from environment
+		// In the future, this could be extracted from session/token
+		defaultUsername := "admin"
+		if envUser := c.Request.Header.Get("X-Admin-User"); envUser != "" {
+			defaultUsername = envUser
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Verify current password
+		isValid, err := adminService.VerifyPassword(ctx, defaultUsername, payload.CurrentPassword)
+		if err != nil {
+			log.Printf("Error verifying password: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify current password"})
+			return
+		}
+
+		if !isValid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "current password is incorrect"})
+			return
+		}
+
+		// Update password
+		err = adminService.UpdatePassword(ctx, defaultUsername, payload.NewPassword)
+		if err != nil {
+			log.Printf("Error updating password: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
 	})
 }

@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log"
+	"os"
 	"time"
 
 	"backend/handlers"
+	"backend/services"
 	"backend/settings"
 	"backend/utils"
 
@@ -40,6 +42,25 @@ func main() {
 	mongoColl = client.Database(cfg.DBName).Collection("students")
 	// use a dedicated collection for school officials (registrar/director)
 	mongoCollOfficials := client.Database(cfg.DBName).Collection("officials")
+	// use a dedicated collection for admin users
+	mongoCollAdmin := client.Database(cfg.DBName).Collection("admins")
+
+	// Initialize admin service and create default admin if not exists
+	adminService := services.NewAdminService(mongoCollAdmin)
+	defaultUsername := os.Getenv("ADMIN_USER")
+	if defaultUsername == "" {
+		defaultUsername = "admin"
+	}
+	defaultPassword := os.Getenv("ADMIN_PASS")
+	if defaultPassword == "" {
+		defaultPassword = "admin123"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := adminService.InitializeDefaultAdmin(ctx, defaultUsername, defaultPassword); err != nil {
+		log.Printf("Warning: failed to initialize default admin: %v", err)
+	}
 
 	// register custom validator for idcard (13 digits)
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
@@ -50,7 +71,7 @@ func main() {
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection
-	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials)
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }
