@@ -256,8 +256,8 @@ export default function RequestsClient() {
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ลำดับ</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ชื่อ-นามสกุล</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">เลขประจำตัว</th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">รหัสนักเรียน</th>
+                    <th className="hidden px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">เลขประจำตัว</th>
+                    <th className="hidden px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">รหัสนักเรียน</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ประเภทเอกสาร</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">ชั้น</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">วัตถุประสงค์</th>
@@ -285,10 +285,10 @@ export default function RequestsClient() {
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
+                        <td className="hidden px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
                           {request.id_card}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
+                        <td className="hidden px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">
                           {request.student_id || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
