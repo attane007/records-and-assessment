@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    // Expect path like /api/requests/{id}/status - the path after /api
-    const forwardPath = url.pathname.replace('/api', '') + url.search;
+  // Forward the full pathname (including /api) so the backend receives the same path
+  const forwardPath = url.pathname + url.search;
 
     const body = await req.arrayBuffer();
 
@@ -62,7 +62,7 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const forwardPath = url.pathname.replace('/api', '') + url.search;
+  const forwardPath = url.pathname + url.search;
     const body = await req.arrayBuffer();
 
     const init: RequestInit = {

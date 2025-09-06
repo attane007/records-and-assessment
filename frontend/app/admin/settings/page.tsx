@@ -8,14 +8,16 @@ export default async function SettingsPage() {
   const session = await getSessionFromCookies();
   if (!session) redirect("/login");
 
-  // Fetch current officials data from backend
-  const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+  // Fetch current officials data via Next.js API route which forwards to the Go backend
+  const apiUrl = "/api/backend/officials";
   let officials = { registrar_name: "", director_name: "" };
-  
+
   try {
-    const res = await fetch(`${backendURL}/api/officials`, { cache: "no-store" });
+    const res = await fetch(apiUrl, { cache: "no-store" });
     if (res.ok) {
       officials = await res.json();
+    } else {
+      console.error('Failed to fetch officials: response status', res.status);
     }
   } catch (error) {
     console.error("Failed to fetch officials:", error);
