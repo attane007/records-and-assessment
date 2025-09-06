@@ -51,8 +51,8 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
     setMessage(null);
 
     try {
-      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-      const response = await fetch(`${backendURL}/api/officials`, {
+      // Use the Next.js API proxy so cookies/auth and CORS are handled by the server
+      const response = await fetch('/api/backend/officials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
