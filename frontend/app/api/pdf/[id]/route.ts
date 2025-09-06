@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 
-const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://backend:8080').replace(/\/$/, '');
+const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: { params: { id: string } | Promise<{ id: string }> }) {
   try {
+    const params = await (context.params as Promise<{ id: string }> | { id: string });
     const id = params.id;
     const url = `${backendUrl}/api/pdf/${encodeURIComponent(id)}`;
 

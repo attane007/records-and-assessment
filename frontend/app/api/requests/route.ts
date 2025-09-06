@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
-
 async function proxyFetch(path: string, init?: RequestInit) {
   const url = `${backendUrl}${path}`;
   const res = await fetch(url, init);
@@ -14,7 +13,7 @@ async function proxyFetch(path: string, init?: RequestInit) {
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const path = `/api/requests${url.search}`;
@@ -36,7 +35,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+export async function PUT(req: NextRequest) {
   try {
     const url = new URL(req.url);
     // Expect path like /api/requests/{id}/status - the path after /api
@@ -60,7 +59,7 @@ export async function PUT(req: Request) {
 }
 
 // Support other methods like POST if needed
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const forwardPath = url.pathname.replace('/api', '') + url.search;
