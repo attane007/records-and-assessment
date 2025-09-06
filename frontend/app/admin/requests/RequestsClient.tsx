@@ -66,13 +66,9 @@ export default function RequestsClient() {
       if (Number.isNaN(page) || page < 1) page = 1;
       const limit = 20;
 
-      // Fetch request data from backend
-      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-      
+      // Fetch request data from Next.js server-side proxy
       try {
-        const res = await fetch(`${backendURL}/api/requests?page=${page}&limit=${limit}`, { 
-          cache: "no-store" 
-        });
+        const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
         if (res.ok) {
           const responseData = await res.json();
           setData(responseData);
@@ -89,8 +85,7 @@ export default function RequestsClient() {
 
   const handleUpdateStatus = async (requestId: string, status: string) => {
     try {
-      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-      const response = await fetch(`${backendURL}/api/requests/${requestId}/status`, {
+  const response = await fetch(`/api/requests/${requestId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -104,9 +99,7 @@ export default function RequestsClient() {
         const page = parseInt(searchParams.get('page') || '1', 10);
         const limit = 20;
 
-        const res = await fetch(`${backendURL}/api/requests?page=${page}&limit=${limit}`, { 
-          cache: "no-store" 
-        });
+  const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
         if (res.ok) {
           const responseData = await res.json();
           setData(responseData);
@@ -124,11 +117,8 @@ export default function RequestsClient() {
 
   const handlePrintPDF = async (requestId: string) => {
     try {
-      const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
-      const pdfEndpoint = `${backendURL}/api/pdf/${requestId}`;
-
-      // Always fetch as blob and force a download (no new tab)
-      const response = await fetch(pdfEndpoint, { method: 'GET', cache: 'no-store' });
+  // Fetch PDF through Next.js proxy
+  const response = await fetch(`/api/pdf/${requestId}`, { method: 'GET', cache: 'no-store' });
       if (!response.ok) {
         alert('ไม่สามารถสร้าง PDF ได้ กรุณาลองใหม่อีกครั้ง');
         return;
