@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface SettingsFormProps {
@@ -24,6 +24,28 @@ interface PasswordFormData {
 export default function SettingsForm({ initialData }: SettingsFormProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>(initialData);
+
+  // If initialData is empty (SSR fetch may have failed), fetch from proxy on client
+  useEffect(() => {
+    const shouldFetch = (!initialData || (!initialData.registrar_name && !initialData.director_name));
+    if (!shouldFetch) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/backend/officials', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data) setFormData({ registrar_name: data.registrar_name || '', director_name: data.director_name || '' });
+        }
+      } catch (e) {
+        // ignore — we'll keep initial empty state
+        console.error('Failed to load officials on client:', e);
+      }
+    })();
+
+    return () => { mounted = false; };
+  }, [initialData]);
   const [passwordData, setPasswordData] = useState<PasswordFormData>({
     currentPassword: "",
     newPassword: "",

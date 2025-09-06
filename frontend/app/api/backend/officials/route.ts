@@ -2,22 +2,28 @@ import { NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
 
-async function forward(path: string, method: string, body?: any, headers?: Headers) {
+async function forward(path: string, method: string, body?: any, incomingHeaders?: Headers) {
   const url = `${BACKEND_URL}${path}`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (incomingHeaders) {
+    const cookie = incomingHeaders.get?.('cookie') || '';
+    const host = incomingHeaders.get?.('host') || '';
+    if (cookie) headers['cookie'] = cookie;
+    if (host) headers['x-forwarded-host'] = host;
+  }
+
   const fetchOptions: RequestInit = {
     method,
-    headers: {
-      // Forward JSON content-type by default; callers can override
-      'Content-Type': 'application/json',
-    },
-    // We forward the body if present
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   };
 
   try {
     const res = await fetch(url, fetchOptions);
     const text = await res.text();
-    // Try to parse JSON, otherwise return text
     let data: any;
     try {
       data = text ? JSON.parse(text) : null;
@@ -25,28 +31,25 @@ async function forward(path: string, method: string, body?: any, headers?: Heade
       data = text;
     }
 
-    return new NextResponse(JSON.stringify(data), {
-      status: res.status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // Use NextResponse.json to properly set content-type and body
+    return NextResponse.json(data, { status: res.status });
   } catch (err) {
     console.error('Error forwarding request to backend:', err);
-    return new NextResponse(JSON.stringify({ error: 'Backend forwarding failed' }), { status: 502 });
+    return NextResponse.json({ error: 'Backend forwarding failed' }, { status: 502 });
   }
 }
 
-export async function GET() {
-  // Forward GET /api/officials
-  return forward('/api/officials', 'GET');
+export async function GET(req: Request) {
+  // Forward GET /api/officials and include incoming headers
+  return forward('/api/officials', 'GET', undefined, req.headers as Headers);
 }
 
 export async function POST(req: Request) {
-  // Forward POST (create/update) to backend
   const body = await req.json().catch(() => null);
-  return forward('/api/officials', 'POST', body);
+  return forward('/api/officials', 'POST', body, req.headers as Headers);
 }
 
 export async function PUT(req: Request) {
   const body = await req.json().catch(() => null);
-  return forward('/api/officials', 'PUT', body);
+  return forward('/api/officials', 'PUT', body, req.headers as Headers);
 }
