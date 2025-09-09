@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 
 async function handleLogout(req: Request) {
   try {
-  // Use a relative redirect to avoid depending on the incoming Host header
-  // (some proxies / containers forward a localhost host which causes redirects to localhost)
-  const res = NextResponse.redirect("/", 303);
+    // Build a response that sets a relative Location header and clears the session cookie.
+    // Using NextResponse.redirect with a relative path can throw in some runtimes,
+    // so construct the headers manually to avoid URL validation issues and to avoid
+    // relying on an incoming Host header that may be set to localhost by proxies.
     const isProd = process.env.NODE_ENV === "production";
-    // clear cookie by setting empty value and maxAge 0
-    res.cookies.set("session", "", {
-      httpOnly: true,
-      path: "/",
-      maxAge: 0,
-      sameSite: "strict",
-      secure: isProd,
+    const cookie = `session=; Path=/; Max-Age=0; SameSite=Strict; HttpOnly${isProd ? "; Secure" : ""}`;
+
+    return new Response(null, {
+      status: 303,
+      headers: {
+        Location: "/",
+        "Set-Cookie": cookie,
+      },
     });
-    return res;
   } catch (err) {
     // log so stacktrace appears in server logs
     console.error("Logout handler error:", err);
