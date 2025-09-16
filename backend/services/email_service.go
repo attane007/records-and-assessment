@@ -54,6 +54,21 @@ func SendSubmissionNotification(ctx context.Context, payload models.StudentData,
 	}
 	jwtConfig.Subject = delegate
 
+	// Prefetch an access token to get clearer errors early (e.g. unauthorized_client)
+	ts := jwtConfig.TokenSource(ctx)
+
+	// Try to fetch a token explicitly so we can return a helpful error if the
+	// service account isn't authorized for domain-wide delegation or the client
+	// isn't granted the gmail.send scope.
+	// Note: Token() returns (*oauth2.Token, error) from golang.org/x/oauth2.
+	token, tokErr := ts.Token()
+	if tokErr != nil {
+		return fmt.Errorf("failed to retrieve access token for delegate '%s': %w", delegate, tokErr)
+	}
+	if token == nil || token.AccessToken == "" {
+		return fmt.Errorf("retrieved invalid access token for delegate '%s'", delegate)
+	}
+
 	client := jwtConfig.Client(ctx)
 
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
