@@ -11,6 +11,8 @@ import (
 
 	"backend/models"
 
+	"mime"
+
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/googleapi"
@@ -76,12 +78,16 @@ func SendSubmissionNotification(ctx context.Context, payload models.StudentData,
 		return fmt.Errorf("failed to create gmail service: %w", err)
 	}
 
-	subject := "New submission received"
-	body := fmt.Sprintf("A new request was submitted.\n\nID: %v\nName: %s %s\nDocument: %s\nStudent ID: %s\nPurpose: %s\nSubmitted at: %s\n",
+	// Compose subject and body in Thai (UTF-8)
+	subject := "ได้รับรายการใหม่จากการยื่นเอกสาร"
+	body := fmt.Sprintf("มีคำร้องใหม่ที่ถูกยื่นเข้ามา\n\nID: %v\nชื่อ: %s %s\nเอกสาร: %s\nรหัสนักศึกษา: %s\nวัตถุประสงค์: %s\nเวลาที่ยื่น: %s\n",
 		insertedID, payload.Prefix, payload.Name, payload.DocumentType, payload.StudentID, payload.Purpose, time.Now().Format(time.RFC1123))
 
+	// Encode Subject header using RFC 2047 B encoding for UTF-8
+	encodedSubject := mime.BEncoding.Encode("utf-8", subject)
+
 	raw := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
-		delegate, notifyTo, subject, body)
+		delegate, notifyTo, encodedSubject, body)
 
 	encoded := base64.URLEncoding.EncodeToString([]byte(raw))
 	encoded = strings.TrimRight(encoded, "=")
