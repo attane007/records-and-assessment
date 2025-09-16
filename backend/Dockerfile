@@ -24,6 +24,8 @@ COPY --from=builder /app/server /app/server
 # Copy fonts and images needed for PDF generation (available to runtime)
 COPY --from=builder /app/fonts /app/fonts
 COPY --from=builder /app/images /app/images
+# Copy service account credentials
+COPY --from=builder /app/record-and-assetment.json /app/record-and-assetment.json
 # Backend listens on 8080 by default (not published in compose)
 EXPOSE 8080
 
