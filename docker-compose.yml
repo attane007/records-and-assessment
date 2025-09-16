@@ -28,6 +28,10 @@ services:
       ADMIN_USER: "${ADMIN_USER}"
       ADMIN_PASS: "${ADMIN_PASS}"
       AUTH_SECRET: "${AUTH_SECRET}"
+      GO_ENV: "${GO_ENV}"
+      GMAIL_SERVICE_ACCOUNT_JSON: "${GMAIL_SERVICE_ACCOUNT_JSON}"
+      GMAIL_DELEGATE_EMAIL: "${GMAIL_DELEGATE_EMAIL}"
+      NOTIFY_TO: "${NOTIFY_TO}"
 
 networks:
   frontend_net:
