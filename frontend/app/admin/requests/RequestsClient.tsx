@@ -99,19 +99,20 @@ export default function RequestsClient() {
         const page = parseInt(searchParams.get('page') || '1', 10);
         const limit = 20;
 
-  const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
+        const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
         if (res.ok) {
           const responseData = await res.json();
           setData(responseData);
         }
-        
-        alert(`อัพเดตสถานะเป็น ${status === 'completed' ? 'สำเร็จ' : status === 'cancelled' ? 'ยกเลิก' : 'รออนุมัติ'} แล้ว`);
+        // Intentionally do not show a browser alert here per UX requirement
+        // Consider replacing with a non-blocking UI notification in the future
       } else {
-        alert('ไม่สามารถอัพเดตสถานะได้ กรุณาลองใหม่อีกครั้ง');
+        // Silently fail for now; backend errors are logged in console
+        console.error('Failed to update status: ', await response.text().catch(() => '')); 
       }
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('เกิดข้อผิดพลาดในการอัพเดตสถานะ');
+      // No alert on exception per UX requirement
     }
   };
 
