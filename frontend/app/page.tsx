@@ -91,12 +91,11 @@ export default function Home() {
 
     setLoading(true);
     try {
-  // combine prefix + name + lastname into the single `name` field expected by the backend
-  // NOTE: per request, do NOT include a space between prefix and name when sending to backend
+  // Keep prefix as its own field and send name without the prefix to avoid duplication
   const payload: any = { ...form };
-  payload.name = `${form.prefix ? form.prefix : ""}${form.name}${form.lastname ? " " + form.lastname : ""}`.trim();
-      // remove the temporary lastname property so payload shape matches previous API
-      delete payload.lastname;
+  payload.name = `${form.name}${form.lastname ? " " + form.lastname : ""}`.trim();
+    // remove the temporary lastname property so payload shape matches previous API
+    delete payload.lastname;
 
       const res = await fetch("/api/submit", {
         method: "POST",
