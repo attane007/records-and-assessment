@@ -18,6 +18,7 @@ function isValidThaiID(s: string) {
 
 type FormState = {
   name: string;
+  lastname?: string;
   prefix?: string;
   id_card: string;
   student_id?: string;
@@ -34,6 +35,7 @@ type FormState = {
 export default function Home() {
   const [form, setForm] = useState<FormState>({
     name: "",
+    lastname: "",
     prefix: "",
     id_card: "",
     student_id: "",
@@ -67,7 +69,7 @@ export default function Home() {
     setErrors({});
 
   // basic client-side required check
-  const required = ["name", "id_card", "date_of_birth", "purpose", "prefix", "document_type"];
+  const required = ["name", "lastname", "id_card", "date_of_birth", "purpose", "prefix", "document_type"];
     const missing: Record<string, string> = {};
     for (const k of required) {
       // @ts-ignore
@@ -89,10 +91,17 @@ export default function Home() {
 
     setLoading(true);
     try {
-  const res = await fetch("/api/submit", {
+  // combine prefix + name + lastname into the single `name` field expected by the backend
+  // NOTE: per request, do NOT include a space between prefix and name when sending to backend
+  const payload: any = { ...form };
+  payload.name = `${form.prefix ? form.prefix : ""}${form.name}${form.lastname ? " " + form.lastname : ""}`.trim();
+      // remove the temporary lastname property so payload shape matches previous API
+      delete payload.lastname;
+
+      const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -223,12 +232,22 @@ export default function Home() {
                         </select>
                       </Field>
 
-                      <Field label="ชื่อ - สกุล *" error={errors.name}>
+                      <Field label="ชื่อ *" error={errors.name}>
                         <input
                           name="name"
                           value={form.name}
                           onChange={handleChange}
-                          placeholder="เช่น กานต์ชัย ใจดี"
+                          placeholder="เช่น กานต์ชัย"
+                          className={inputCls}
+                        />
+                      </Field>
+
+                      <Field label="นามสกุล *" error={errors.lastname}>
+                        <input
+                          name="lastname"
+                          value={form.lastname}
+                          onChange={handleChange}
+                          placeholder="เช่น ใจดี"
                           className={inputCls}
                         />
                       </Field>
@@ -322,6 +341,7 @@ export default function Home() {
                         onClick={() => {
                           setForm({
                             name: "",
+                            lastname: "",
                             prefix: "",
                             id_card: "",
                             student_id: "",
@@ -375,7 +395,7 @@ export default function Home() {
               <CardContent>
                 <div className="grid gap-3 text-sm">
                   <KV k="ประเภทเอกสาร" v={form.document_type || "-"} />
-                  <KV k="ชื่อ - สกุล" v={(form.prefix || form.name) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}` : "-"} />    
+                  <KV k="ชื่อ - สกุล" v={(form.prefix || form.name || form.lastname) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}${form.lastname ? ' ' + form.lastname : ''}` : "-"} />    
                   <KV k="เลขบัตรประชาชน" v={form.id_card || "-"} />
                   <KV k="รหัสนักเรียน" v={form.student_id || "-"} />
                   <KV k="วันเกิด" v={form.date_of_birth || "-"} />
