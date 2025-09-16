@@ -59,6 +59,16 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
+		// send email notification asynchronously; do not block the API response
+		go func(p models.StudentData, insertedID interface{}) {
+			// use a background context with timeout to avoid leaking goroutines
+			ctx2, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			if err := services.SendSubmissionNotification(ctx2, p, insertedID); err != nil {
+				log.Printf("email notification error for id %v: %v", insertedID, err)
+			}
+		}(payload, id)
+
 		c.JSON(http.StatusOK, gin.H{"message": "data saved", "id": id})
 	})
 
