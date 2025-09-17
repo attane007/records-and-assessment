@@ -9,7 +9,8 @@ export default async function SettingsPage() {
   if (!session) redirect("/login");
 
   // Fetch current officials data via Next.js API route which forwards to the Go backend
-  const apiUrl = "/api/backend/officials";
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const apiUrl = `${baseUrl}/api/backend/officials`;
   let officials = { registrar_name: "", director_name: "" };
 
   try {
