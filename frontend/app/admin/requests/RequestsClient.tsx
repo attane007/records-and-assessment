@@ -84,8 +84,18 @@ export default function RequestsClient() {
   }, [session, searchParams?.get("page")]);
 
   const handleUpdateStatus = async (requestId: string, status: string) => {
+    // Find index and previous status
+    const idx = data.requests.findIndex(r => r.id === requestId);
+    if (idx === -1) return;
+    const prevStatus = data.requests[idx].status;
+
+    // Optimistic update
+    const updatedRequests = [...data.requests];
+    updatedRequests[idx] = { ...updatedRequests[idx], status };
+    setData({ ...data, requests: updatedRequests });
+
     try {
-  const response = await fetch(`/api/requests/${requestId}/status`, {
+      const response = await fetch(`/api/requests/${requestId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -93,26 +103,29 @@ export default function RequestsClient() {
         body: JSON.stringify({ status }),
       });
 
-      if (response.ok) {
-        // Refresh data after update
-        const searchParams = new URLSearchParams(window.location.search);
-        const page = parseInt(searchParams.get('page') || '1', 10);
-        const limit = 20;
-
-        const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
-        if (res.ok) {
-          const responseData = await res.json();
-          setData(responseData);
-        }
-        // Intentionally do not show a browser alert here per UX requirement
-        // Consider replacing with a non-blocking UI notification in the future
-      } else {
-        // Silently fail for now; backend errors are logged in console
-        console.error('Failed to update status: ', await response.text().catch(() => '')); 
+      if (!response.ok) {
+        // Revert status and alert error
+        updatedRequests[idx] = { ...updatedRequests[idx], status: prevStatus };
+        setData({ ...data, requests: updatedRequests });
+        const errorText = await response.text().catch(() => 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+        alert(errorText || 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+        return;
       }
+      // Optionally refresh data from backend (optional, UX อาจไม่ต้อง)
+      // const searchParams = new URLSearchParams(window.location.search);
+      // const page = parseInt(searchParams.get('page') || '1', 10);
+      // const limit = 20;
+      // const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
+      // if (res.ok) {
+      //   const responseData = await res.json();
+      //   setData(responseData);
+      // }
     } catch (error) {
+      // Revert status and alert error
+      updatedRequests[idx] = { ...updatedRequests[idx], status: prevStatus };
+      setData({ ...data, requests: updatedRequests });
+      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
       console.error('Error updating status:', error);
-      // No alert on exception per UX requirement
     }
   };
 
