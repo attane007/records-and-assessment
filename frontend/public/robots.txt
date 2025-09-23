@@ -1,0 +1,50 @@
+# robots.txt for https://pp1.krufame.work
+# This file tells web crawlers which parts of the site may be crawled.
+# It also contains explicit disallow rules for some well-known AI/LLM crawlers to opt-out
+# of data collection for model training. Note: robots.txt is advisory — some crawlers may ignore it.
+
+# For known AI / LLM crawlers: allow only the homepage (root) and block everything else.
+# robots.txt matching rules vary by crawler. We use a conservative pattern:
+# - Disallow: /  -> blocks the whole site
+# - Allow: /$ and Allow: /index.html -> try to permit the exact homepage where supported
+# Note: Not all crawlers support the "$" end-of-line marker; Allow /index.html is included as a fallback.
+User-agent: GPTBot
+Disallow: /
+Allow: /$
+Allow: /index.html
+
+User-agent: OpenAI
+Disallow: /
+Allow: /$
+Allow: /index.html
+
+User-agent: OpenAI-GPT
+Disallow: /
+Allow: /$
+Allow: /index.html
+
+User-agent: Anthropic
+Disallow: /
+Allow: /$
+Allow: /index.html
+
+User-agent: Perplexity
+Disallow: /
+Allow: /$
+Allow: /index.html
+
+# Default rules for all other crawlers
+User-agent: *
+# Don't index API or internal-only routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /settings/
+Disallow: /login/
+Disallow: /_next/
+Disallow: /fonts/
+
+# Allow everything else
+Allow: /
+
+# Sitemap (if you generate one, update the URL)
+Sitemap: https://pp1.krufame.work/sitemap.xml
