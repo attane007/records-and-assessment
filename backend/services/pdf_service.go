@@ -310,19 +310,19 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	// draw circle slightly offset from current X
 	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
 	pdf.Circle(xRef, yRef, 2.5, "D")
-	pdf.CellFormat(25, 6, "อนุญาติ", "", 0, "L", false, 0, "")
+	pdf.CellFormat(25, 6, "อนุญาต", "", 0, "L", false, 0, "")
 	xRef = pdf.GetX()
 	pdf.Circle(xRef-5, yRef, 2.5, "D")
-	pdf.CellFormat(40, 6, "ไม่อนุญาติ", "", 0, "L", false, 0, "")
+	pdf.CellFormat(40, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
 	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
 	xRef = pdf.GetX()
 	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
 	pdf.Circle(xRef, yRef, 2.5, "D")
-	pdf.CellFormat(25, 6, "อนุญาติ", "", 0, "L", false, 0, "")
+	pdf.CellFormat(25, 6, "อนุญาต", "", 0, "L", false, 0, "")
 	xRef = pdf.GetX()
 	pdf.Circle(xRef-5, yRef, 2.5, "D")
-	pdf.CellFormat(10, 6, "ไม่อนุญาติ", "", 0, "L", false, 0, "")
+	pdf.CellFormat(10, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
 	pdf.Ln(15)
 	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
