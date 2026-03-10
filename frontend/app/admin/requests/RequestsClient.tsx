@@ -246,9 +246,25 @@ export default function RequestsClient() {
 
   const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } else {
+        // Fallback for insecure context (e.g. HTTP access by IP)
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        return successful;
+      }
+    } catch (err) {
+      console.error("Copy failed: ", err);
       return false;
     }
   };
@@ -281,7 +297,7 @@ export default function RequestsClient() {
     setLinksModalCopyMessage(copied ? "คัดลอกลิงก์ทั้งสองบทบาทให้อัตโนมัติแล้ว" : "คัดลอกอัตโนมัติไม่สำเร็จ กรุณากดคัดลอกด้วยตนเอง");
   };
 
-  const openLinksModal = async (request: RequestRecord) => {
+  const openLinksModal = async (request: RequestRecord, autoCopyRole: OfficialRole | "both" = "both") => {
     setActiveModalRequest({ id: request.id, label: `${request.prefix} ${request.name}` });
     setLinksModalOpen(true);
     setLinksModalLoading(true);
@@ -297,7 +313,11 @@ export default function RequestsClient() {
 
       const nextLinks = { registrar, director };
       setModalLinks(nextLinks);
-      await copyLinkBundle(nextLinks);
+      if (autoCopyRole === "both") {
+        await copyLinkBundle(nextLinks);
+      } else {
+        await handleCopyRoleLink(autoCopyRole, nextLinks);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "เกิดข้อผิดพลาดระหว่างสร้างลิงก์ลงนาม";
       setLinksModalError(message);
@@ -316,8 +336,8 @@ export default function RequestsClient() {
     setModalLinks({ registrar: null, director: null });
   };
 
-  const handleCopyRoleLink = async (role: OfficialRole) => {
-    const link = modalLinks[role]?.sign_url;
+  const handleCopyRoleLink = async (role: OfficialRole, currentLinks = modalLinks) => {
+    const link = currentLinks[role]?.sign_url;
     if (!link) return;
     const copied = await copyText(link);
     setLinksModalCopyMessage(copied ? `คัดลอกลิงก์${role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}แล้ว` : "คัดลอกไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
@@ -663,7 +683,7 @@ export default function RequestsClient() {
                               </button>
 
                               <button
-                                onClick={() => void openLinksModal(request)}
+                                onClick={() => void openLinksModal(request, "registrar")}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700 rounded hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="สร้างลิงก์ลงนามนายทะเบียน"
                               >
@@ -671,7 +691,7 @@ export default function RequestsClient() {
                               </button>
 
                               <button
-                                onClick={() => void openLinksModal(request)}
+                                onClick={() => void openLinksModal(request, "director")}
                                 className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="สร้างลิงก์ลงนามผู้อำนวยการ"
                               >
