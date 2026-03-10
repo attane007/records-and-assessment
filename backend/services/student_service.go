@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"backend/models"
@@ -236,8 +237,10 @@ func ComputeRequestHash(request *RequestRecord) string {
 	if request == nil {
 		return ""
 	}
-	// Concatenate key fields to form a unique string representing the document state.
-	// We exclude signature data itself to maintain a "document state at time of signing" hash.
+	// Use a fixed format without fractional seconds to ensure consistent hashing even if stored with different precision.
+	// Use UTC to avoid any timezone shifts between save and retrieval.
+	createdStr := request.CreatedAt.UTC().Format("2006-01-02T15:04:05Z")
+
 	raw := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s",
 		request.Prefix,
 		request.Name,
@@ -248,10 +251,22 @@ func ComputeRequestHash(request *RequestRecord) string {
 		request.AcademicYear,
 		request.DateOfBirth,
 		request.Purpose,
-		request.CreatedAt.UTC().Format(time.RFC3339),
+		createdStr,
 	)
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// ToObjectID safely converts an interface{} (usually from MongoDB) to a primitive.ObjectID.
+func ToObjectID(id interface{}) (primitive.ObjectID, error) {
+	switch v := id.(type) {
+	case primitive.ObjectID:
+		return v, nil
+	case string:
+		return primitive.ObjectIDFromHex(v)
+	default:
+		return primitive.NilObjectID, fmt.Errorf("unsupported id type: %T", id)
+	}
 }
 
 // UpsertSignature stores one signature block for a given request and role, and records an audit log.
@@ -282,16 +297,23 @@ func UpsertSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl
 	}
 
 	// Record Audit Log
-	audit := models.AuditLog{
-		RequestID:    record.ID.(primitive.ObjectID),
-		Role:         role,
-		Action:       "sign",
-		DocumentHash: hash,
-		IPAddress:    ipAddress,
-		UserAgent:    userAgent,
-		Timestamp:    time.Now().UTC(),
+	objID, decodeErr := ToObjectID(record.ID)
+	if decodeErr == nil {
+		audit := models.AuditLog{
+			RequestID:    objID,
+			Role:         role,
+			Action:       "sign",
+			DocumentHash: hash,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
+			Timestamp:    time.Now().UTC(),
+		}
+		if auditErr := RecordAuditLog(ctx, auditColl, audit); auditErr != nil {
+			log.Printf("[AUDIT] UpsertSignature Failed: %v", auditErr)
+		}
+	} else {
+		log.Printf("[AUDIT] ID Conversion Error: %v", decodeErr)
 	}
-	_ = RecordAuditLog(ctx, auditColl, audit)
 
 	return nil
 }
@@ -340,16 +362,23 @@ func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Co
 	}
 
 	// Record Audit Log
-	audit := models.AuditLog{
-		RequestID:    record.ID.(primitive.ObjectID),
-		Role:         role,
-		Action:       string(decision),
-		DocumentHash: hash,
-		IPAddress:    ipAddress,
-		UserAgent:    userAgent,
-		Timestamp:    time.Now().UTC(),
+	objID, decodeErr := ToObjectID(record.ID)
+	if decodeErr == nil {
+		audit := models.AuditLog{
+			RequestID:    objID,
+			Role:         role,
+			Action:       string(decision),
+			DocumentHash: hash,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
+			Timestamp:    time.Now().UTC(),
+		}
+		if auditErr := RecordAuditLog(ctx, auditColl, audit); auditErr != nil {
+			log.Printf("[AUDIT] UpsertOfficialDecisionAndSignature Failed: %v", auditErr)
+		}
+	} else {
+		log.Printf("[AUDIT] ID Conversion Error: %v", decodeErr)
 	}
-	_ = RecordAuditLog(ctx, auditColl, audit)
 
 	return nil
 }
