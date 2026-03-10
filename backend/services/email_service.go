@@ -60,7 +60,7 @@ func loadDelegatedGmailService(ctx context.Context) (*gmail.Service, string, err
 	return srv, delegate, nil
 }
 
-func sendRawEmail(ctx context.Context, srv *gmail.Service, from, to, subject, body string) error {
+func sendRawEmail(_ context.Context, srv *gmail.Service, from, to, subject, body string) error {
 	encodedSubject := mime.BEncoding.Encode("utf-8", subject)
 	raw := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
 		from, to, encodedSubject, body)

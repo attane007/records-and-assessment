@@ -17,6 +17,31 @@ type RequestSignatures struct {
 	Director  *SignatureBlock `json:"director,omitempty" bson:"director,omitempty"`
 }
 
+// OfficialDecisionValue stores an official decision for one role.
+type OfficialDecisionValue string
+
+const (
+	OfficialDecisionApprove OfficialDecisionValue = "approve"
+	OfficialDecisionReject  OfficialDecisionValue = "reject"
+)
+
+// IsValidOfficialDecision reports whether a decision value is supported.
+func IsValidOfficialDecision(value OfficialDecisionValue) bool {
+	return value == OfficialDecisionApprove || value == OfficialDecisionReject
+}
+
+// OfficialDecision stores the selected decision with timestamp.
+type OfficialDecision struct {
+	Decision  OfficialDecisionValue `json:"decision" bson:"decision"`
+	DecidedAt time.Time             `json:"decided_at" bson:"decided_at"`
+}
+
+// RequestDecisions stores official decisions for each role.
+type RequestDecisions struct {
+	Registrar *OfficialDecision `json:"registrar,omitempty" bson:"registrar,omitempty"`
+	Director  *OfficialDecision `json:"director,omitempty" bson:"director,omitempty"`
+}
+
 // StudentData represents the payload expected from the frontend for ปพ.1
 type StudentData struct {
 	Name         string `json:"name" bson:"name" binding:"required"`
@@ -36,4 +61,5 @@ type StudentData struct {
 	MotherName   string `json:"mother_name" bson:"mother_name"`
 
 	Signatures RequestSignatures `json:"signatures" bson:"signatures"`
+	Decisions  RequestDecisions  `json:"decisions,omitempty" bson:"decisions,omitempty"`
 }

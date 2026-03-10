@@ -1,6 +1,7 @@
 package services
 
 import (
+	"backend/models"
 	"bytes"
 	"encoding/base64"
 	"fmt"
@@ -56,6 +57,16 @@ func drawSignatureImage(pdf *gofpdf.Fpdf, alias string, rawData string, x, y, w,
 	opt := gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}
 	pdf.RegisterImageOptionsReader(alias, opt, bytes.NewReader(data))
 	pdf.ImageOptions(alias, x, y, w, h, false, opt, 0, "")
+}
+
+func drawDecisionCircle(pdf *gofpdf.Fpdf, x, y float64, selected bool) {
+	pdf.SetDrawColor(0, 0, 0)
+	pdf.SetLineWidth(0.3)
+	pdf.Circle(x, y, 2.5, "D")
+	if selected {
+		pdf.SetFillColor(0, 0, 0)
+		pdf.Circle(x, y, 1.2, "F")
+	}
 }
 
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
@@ -323,10 +334,22 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	pdf.Ln(14)
 	pdf.SetX(pageMargins.Left + 120)
 	studentSignLineY := pdf.GetY()
-	pdf.CellFormat(10, 6, "ลงชื่อ ______________________________", "", 0, "C", false, 0, "")
+	studentSignX := pdf.GetX()
+	studentSignLabel := "ลงชื่อ ______________________________"
+	studentSignCellW := printableW - (studentSignX - pageMargins.Left)
+	if studentSignCellW < 55 {
+		studentSignCellW = 55
+	}
+	pdf.CellFormat(studentSignCellW, 6, studentSignLabel, "", 0, "L", false, 0, "")
 	pdf.Ln(7)
 	if request.Signatures.Student != nil {
-		drawSignatureImage(pdf, "sig-student", request.Signatures.Student.DataBase64, pageMargins.Left+138, studentSignLineY-5, 42, 12)
+		underlineStartX := studentSignX + pdf.GetStringWidth("ลงชื่อ ") + 1.5
+		signatureW := 42.0
+		maxSignatureW := studentSignCellW - pdf.GetStringWidth("ลงชื่อ ") - 4
+		if maxSignatureW > 0 && signatureW > maxSignatureW {
+			signatureW = maxSignatureW
+		}
+		drawSignatureImage(pdf, "sig-student", request.Signatures.Student.DataBase64, underlineStartX, studentSignLineY-4.5, signatureW, 11)
 	}
 	pdf.SetX(pageMargins.Left + 120)
 	// use provided name for requester
@@ -352,26 +375,30 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	pdf.Ln(10)
 	pdf.SetX(pageMargins.Left + 9)
 	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
-
-	xRef := pdf.GetX()
 	yRef := pdf.GetY() + 3.0 // center vertically in the 6mm-high cell
-	pdf.SetDrawColor(0, 0, 0)
-	pdf.SetLineWidth(0.3)
-	// draw circle slightly offset from current X
+
+	registrarApprove := request.Decisions.Registrar != nil && request.Decisions.Registrar.Decision == models.OfficialDecisionApprove
+	registrarReject := request.Decisions.Registrar != nil && request.Decisions.Registrar.Decision == models.OfficialDecisionReject
+	directorApprove := request.Decisions.Director != nil && request.Decisions.Director.Decision == models.OfficialDecisionApprove
+	directorReject := request.Decisions.Director != nil && request.Decisions.Director.Decision == models.OfficialDecisionReject
+
+	registrarApproveCircleX := pdf.GetX() + 2.5
 	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
-	pdf.Circle(xRef, yRef, 2.5, "D")
+	drawDecisionCircle(pdf, registrarApproveCircleX, yRef, registrarApprove)
 	pdf.CellFormat(25, 6, "อนุญาต", "", 0, "L", false, 0, "")
-	xRef = pdf.GetX()
-	pdf.Circle(xRef-5, yRef, 2.5, "D")
+	registrarRejectCircleX := pdf.GetX() + 2.5
+	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
+	drawDecisionCircle(pdf, registrarRejectCircleX, yRef, registrarReject)
 	pdf.CellFormat(40, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
 	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
-	xRef = pdf.GetX()
+	directorApproveCircleX := pdf.GetX() + 2.5
 	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
-	pdf.Circle(xRef, yRef, 2.5, "D")
+	drawDecisionCircle(pdf, directorApproveCircleX, yRef, directorApprove)
 	pdf.CellFormat(25, 6, "อนุญาต", "", 0, "L", false, 0, "")
-	xRef = pdf.GetX()
-	pdf.Circle(xRef-5, yRef, 2.5, "D")
+	directorRejectCircleX := pdf.GetX() + 2.5
+	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
+	drawDecisionCircle(pdf, directorRejectCircleX, yRef, directorReject)
 	pdf.CellFormat(10, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
 	pdf.Ln(15)

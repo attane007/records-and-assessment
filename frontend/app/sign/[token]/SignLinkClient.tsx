@@ -5,6 +5,7 @@ import SignatureCapturePanel from "@/components/signature/SignatureCapturePanel"
 import type {
   ApiErrorResponse,
   CreateSignSessionResponse,
+  OfficialDecision,
   SignLinkInfoResponse,
   UpdateSignatureRequestBody,
 } from "@/lib/types/api";
@@ -46,6 +47,7 @@ export default function SignLinkClient({ token }: { token: string }) {
   const [error, setError] = useState("");
   const [completed, setCompleted] = useState(false);
   const [info, setInfo] = useState<SignLinkInfoResponse | null>(null);
+  const [decision, setDecision] = useState<OfficialDecision | "">("");
 
   useEffect(() => {
     let active = true;
@@ -81,10 +83,14 @@ export default function SignLinkClient({ token }: { token: string }) {
   }, [token]);
 
   async function submitSignature(payload: UpdateSignatureRequestBody) {
+    if (!decision) {
+      throw new Error("กรุณาเลือกความเห็น (อนุญาต/ไม่อนุญาต) ก่อนลงนาม");
+    }
+
     const res = await fetch(`/api/sign-links/${encodeURIComponent(token)}/sign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, decision }),
     });
 
     if (!res.ok) {
@@ -97,10 +103,14 @@ export default function SignLinkClient({ token }: { token: string }) {
   }
 
   async function requestQrSession() {
+    if (!decision) {
+      throw new Error("กรุณาเลือกความเห็นก่อนสร้าง QR");
+    }
+
     const res = await fetch("/api/sign-sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token, decision }),
     });
 
     const data: unknown = await res.json().catch(() => null);
@@ -146,6 +156,33 @@ export default function SignLinkClient({ token }: { token: string }) {
         <div>บทบาทผู้ลงนาม: {info.role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}</div>
         <div>คำร้อง: {info.request.prefix} {info.request.name} ({info.request.document_type})</div>
       </div>
+
+      <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">ความเห็นเจ้าหน้าที่</h2>
+        <p className="mt-1 text-xs text-slate-600">กรุณาเลือกความเห็นก่อนยืนยันลายเซ็นต์</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            <input
+              type="radio"
+              name="official-decision"
+              value="approve"
+              checked={decision === "approve"}
+              onChange={() => setDecision("approve")}
+            />
+            อนุญาต
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            <input
+              type="radio"
+              name="official-decision"
+              value="reject"
+              checked={decision === "reject"}
+              onChange={() => setDecision("reject")}
+            />
+            ไม่อนุญาต
+          </label>
+        </div>
+      </section>
 
       <SignatureCapturePanel
         title="ลงนามเอกสาร"

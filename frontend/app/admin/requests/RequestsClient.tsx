@@ -9,6 +9,8 @@ import type {
   ApiErrorResponse,
   CreateSignLinkResponse,
   MeResponse,
+  OfficialsPayload,
+  RequestRecord,
   RequestStatus,
   RequestsResponse,
 } from "@/lib/types/api";
@@ -59,11 +61,32 @@ function isCreateSignLinkResponse(value: unknown): value is CreateSignLinkRespon
   );
 }
 
+function isOfficialsPayload(value: unknown): value is OfficialsPayload {
+  return (
+    isRecord(value) &&
+    typeof value.registrar_name === "string" &&
+    typeof value.director_name === "string"
+  );
+}
+
+type OfficialRole = "registrar" | "director";
+
 export default function RequestsClient() {
   const router = useRouter();
   const [session, setSession] = useState<AdminSession | null>(null);
   const [data, setData] = useState<RequestsResponse>({ requests: [], total: 0, page: 1, limit: 20, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [officialEmails, setOfficialEmails] = useState<{ registrar: string; director: string }>({ registrar: "", director: "" });
+  const [linksModalOpen, setLinksModalOpen] = useState(false);
+  const [linksModalLoading, setLinksModalLoading] = useState(false);
+  const [linksModalError, setLinksModalError] = useState("");
+  const [linksModalCopyMessage, setLinksModalCopyMessage] = useState("");
+  const [sendingRole, setSendingRole] = useState<OfficialRole | null>(null);
+  const [activeModalRequest, setActiveModalRequest] = useState<{ id: string; label: string } | null>(null);
+  const [modalLinks, setModalLinks] = useState<Record<OfficialRole, CreateSignLinkResponse | null>>({
+    registrar: null,
+    director: null,
+  });
   const searchParams = useSearchParams();
   const pageParam = searchParams?.get("page") ?? "1";
 
@@ -117,6 +140,32 @@ export default function RequestsClient() {
 
     void fetchData();
   }, [pageParam, session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    let active = true;
+    const loadOfficialEmails = async () => {
+      try {
+        const res = await fetch("/api/backend/officials", { cache: "no-store" });
+        const payload: unknown = await res.json().catch(() => null);
+        if (!active || !res.ok || !isOfficialsPayload(payload)) {
+          return;
+        }
+        setOfficialEmails({
+          registrar: (payload.registrar_email || "").trim(),
+          director: (payload.director_email || "").trim(),
+        });
+      } catch {
+        // keep default empty emails
+      }
+    };
+
+    void loadOfficialEmails();
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   const handleUpdateStatus = async (requestId: string, status: RequestStatus) => {
     // Find index and previous status
@@ -204,58 +253,95 @@ export default function RequestsClient() {
     }
   };
 
-  const handleCreateSignLink = async (
+  const createSignLink = async (
     requestId: string,
-    role: "registrar" | "director",
+    role: OfficialRole,
     channel: "email" | "copy"
-  ) => {
-    const roleLabel = role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ";
+  ): Promise<CreateSignLinkResponse> => {
+    const res = await fetch(`/api/requests/${requestId}/sign-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, channel }),
+    });
+
+    const data: unknown = await res.json().catch(() => null);
+    if (!res.ok || !isCreateSignLinkResponse(data)) {
+      if (isApiErrorResponse(data)) {
+        throw new Error(data.error);
+      }
+      throw new Error("ไม่สามารถสร้างลิงก์ลงนามได้");
+    }
+    return data;
+  };
+
+  const copyLinkBundle = async (links: Record<OfficialRole, CreateSignLinkResponse | null>) => {
+    if (!links.registrar || !links.director) return;
+    const text = `ลิงก์นายทะเบียน: ${links.registrar.sign_url}\nลิงก์ผู้อำนวยการ: ${links.director.sign_url}`;
+    const copied = await copyText(text);
+    setLinksModalCopyMessage(copied ? "คัดลอกลิงก์ทั้งสองบทบาทให้อัตโนมัติแล้ว" : "คัดลอกอัตโนมัติไม่สำเร็จ กรุณากดคัดลอกด้วยตนเอง");
+  };
+
+  const openLinksModal = async (request: RequestRecord) => {
+    setActiveModalRequest({ id: request.id, label: `${request.prefix} ${request.name}` });
+    setLinksModalOpen(true);
+    setLinksModalLoading(true);
+    setLinksModalError("");
+    setLinksModalCopyMessage("");
+    setModalLinks({ registrar: null, director: null });
 
     try {
-      const res = await fetch(`/api/requests/${requestId}/sign-links`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, channel }),
-      });
+      const [registrar, director] = await Promise.all([
+        createSignLink(request.id, "registrar", "copy"),
+        createSignLink(request.id, "director", "copy"),
+      ]);
 
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok || !isCreateSignLinkResponse(data)) {
-        if (isApiErrorResponse(data)) {
-          alert(data.error);
-          return;
-        }
-        alert("ไม่สามารถสร้างลิงก์ลงนามได้");
-        return;
-      }
-
-      if (channel === "email") {
-        if (data.email_sent) {
-          alert(`ส่งอีเมลลิงก์ลงนามให้${roleLabel}เรียบร้อย`);
-        } else {
-          const message = data.warning || "สร้างลิงก์แล้ว แต่ส่งอีเมลไม่สำเร็จ";
-          alert(`${message}\n\nลิงก์: ${data.sign_url}`);
-        }
-        return;
-      }
-
-      const copied = await copyText(data.sign_url);
-      if (copied) {
-        alert(`คัดลอกลิงก์${roleLabel}เรียบร้อย`);
-      } else {
-        window.prompt(`คัดลอกลิงก์${roleLabel}`, data.sign_url);
-      }
+      const nextLinks = { registrar, director };
+      setModalLinks(nextLinks);
+      await copyLinkBundle(nextLinks);
     } catch (error) {
-      console.error("Failed to create sign link:", error);
-      alert("เกิดข้อผิดพลาดระหว่างสร้างลิงก์ลงนาม");
+      const message = error instanceof Error ? error.message : "เกิดข้อผิดพลาดระหว่างสร้างลิงก์ลงนาม";
+      setLinksModalError(message);
+    } finally {
+      setLinksModalLoading(false);
     }
   };
 
-  const askDeliveryAndCreate = (requestId: string, role: "registrar" | "director") => {
-    const roleLabel = role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ";
-    const useEmail = window.confirm(
-      `เลือกวิธีส่งลิงก์ให้${roleLabel}\n- กด OK: ส่งอีเมลจากระบบ\n- กด Cancel: สร้างลิงก์และคัดลอกเอง`
-    );
-    void handleCreateSignLink(requestId, role, useEmail ? "email" : "copy");
+  const closeLinksModal = () => {
+    setLinksModalOpen(false);
+    setLinksModalLoading(false);
+    setLinksModalError("");
+    setLinksModalCopyMessage("");
+    setSendingRole(null);
+    setActiveModalRequest(null);
+    setModalLinks({ registrar: null, director: null });
+  };
+
+  const handleCopyRoleLink = async (role: OfficialRole) => {
+    const link = modalLinks[role]?.sign_url;
+    if (!link) return;
+    const copied = await copyText(link);
+    setLinksModalCopyMessage(copied ? `คัดลอกลิงก์${role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}แล้ว` : "คัดลอกไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
+  };
+
+  const handleSendRoleEmail = async (role: OfficialRole) => {
+    if (!activeModalRequest) return;
+
+    setSendingRole(role);
+    setLinksModalError("");
+    try {
+      const response = await createSignLink(activeModalRequest.id, role, "email");
+      setModalLinks((prev) => ({ ...prev, [role]: response }));
+      if (response.email_sent) {
+        setLinksModalCopyMessage(`ส่งอีเมลลิงก์${role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}เรียบร้อย`);
+      } else {
+        setLinksModalError(response.warning || "สร้างลิงก์แล้ว แต่ส่งอีเมลไม่สำเร็จ");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "เกิดข้อผิดพลาดระหว่างส่งอีเมล";
+      setLinksModalError(message);
+    } finally {
+      setSendingRole(null);
+    }
   };
 
   if (!session) {
@@ -459,7 +545,7 @@ export default function RequestsClient() {
                             </button>
 
                             <button
-                              onClick={() => askDeliveryAndCreate(request.id, "registrar")}
+                              onClick={() => void openLinksModal(request)}
                               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700 rounded-md hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors cursor-pointer shadow-sm"
                               title="สร้างลิงก์ลงนามนายทะเบียน"
                             >
@@ -470,7 +556,7 @@ export default function RequestsClient() {
                             </button>
 
                             <button
-                              onClick={() => askDeliveryAndCreate(request.id, "director")}
+                              onClick={() => void openLinksModal(request)}
                               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer shadow-sm"
                               title="สร้างลิงก์ลงนามผู้อำนวยการ"
                             >
@@ -583,6 +669,108 @@ export default function RequestsClient() {
           )}
         </div>
       </main>
+
+      {linksModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
+          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">ลิงก์ลงนามเจ้าหน้าที่</h2>
+                <p className="text-sm text-slate-600">คำร้อง: {activeModalRequest?.label || "-"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeLinksModal}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                ปิด
+              </button>
+            </div>
+
+            {linksModalLoading ? (
+              <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-700">
+                กำลังสร้างลิงก์นายทะเบียนและผู้อำนวยการ...
+              </div>
+            ) : null}
+
+            {linksModalError ? (
+              <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {linksModalError}
+              </div>
+            ) : null}
+
+            {linksModalCopyMessage ? (
+              <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                {linksModalCopyMessage}
+              </div>
+            ) : null}
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-sm font-semibold text-slate-800">นายทะเบียน</div>
+                <input
+                  readOnly
+                  value={modalLinks.registrar?.sign_url || ""}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
+                  placeholder="ยังไม่มีลิงก์"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyRoleLink("registrar")}
+                    disabled={!modalLinks.registrar}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    คัดลอกลิงก์
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSendRoleEmail("registrar")}
+                    disabled={!officialEmails.registrar || sendingRole === "registrar"}
+                    className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-xs text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+                  >
+                    {sendingRole === "registrar" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
+                  </button>
+                  {!officialEmails.registrar ? (
+                    <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลนายทะเบียน</span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="mb-2 text-sm font-semibold text-slate-800">ผู้อำนวยการ</div>
+                <input
+                  readOnly
+                  value={modalLinks.director?.sign_url || ""}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
+                  placeholder="ยังไม่มีลิงก์"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyRoleLink("director")}
+                    disabled={!modalLinks.director}
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    คัดลอกลิงก์
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSendRoleEmail("director")}
+                    disabled={!officialEmails.director || sendingRole === "director"}
+                    className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    {sendingRole === "director" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
+                  </button>
+                  {!officialEmails.director ? (
+                    <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลผู้อำนวยการ</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

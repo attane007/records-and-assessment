@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"backend/models"
@@ -117,6 +119,7 @@ func CreateSignSession(ctx context.Context, coll *mongo.Collection, requestID pr
 		ID:         sessionID,
 		RequestID:  requestID,
 		Role:       role,
+		Decision:   "",
 		SignLinkID: signLinkID,
 		Status:     "pending",
 		ExpiresAt:  now.Add(ttl),
@@ -127,6 +130,91 @@ func CreateSignSession(ctx context.Context, coll *mongo.Collection, requestID pr
 		return nil, err
 	}
 	return &record, nil
+}
+
+func CreateDecisionSignSession(ctx context.Context, coll *mongo.Collection, requestID primitive.ObjectID, role models.SignRole, decision models.OfficialDecisionValue, signLinkID *primitive.ObjectID, ttl time.Duration) (*models.SignSession, error) {
+	if role != models.SignRoleRegistrar && role != models.SignRoleDirector {
+		return nil, fmt.Errorf("decision session is only valid for official roles")
+	}
+	if !models.IsValidOfficialDecision(decision) {
+		return nil, fmt.Errorf("invalid official decision")
+	}
+
+	session, err := CreateSignSession(ctx, coll, requestID, role, signLinkID, ttl)
+	if err != nil {
+		return nil, err
+	}
+
+	session.Decision = decision
+	if _, err := coll.UpdateOne(ctx, bson.M{"_id": session.ID}, bson.M{"$set": bson.M{"decision": decision}}); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+type OfficialSignLinkDelivery struct {
+	Role           models.SignRole `json:"role"`
+	RecipientEmail string          `json:"recipient_email"`
+	SignURL        string          `json:"sign_url"`
+	EmailSent      bool            `json:"email_sent"`
+	Warning        string          `json:"warning,omitempty"`
+}
+
+// CreateAndSendOfficialSignLinks creates and emails sign links for roles with configured emails.
+func CreateAndSendOfficialSignLinks(ctx context.Context, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, requestID primitive.ObjectID, publicBaseURL string, expiryDays int) ([]OfficialSignLinkDelivery, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
+	if baseURL == "" {
+		return nil, fmt.Errorf("public base url is required")
+	}
+
+	registrarEmail, directorEmail, err := GetOfficialEmailsFromDB(ctx, officialsColl)
+	if err != nil {
+		return nil, err
+	}
+
+	targets := []struct {
+		Role  models.SignRole
+		Email string
+	}{
+		{Role: models.SignRoleRegistrar, Email: strings.TrimSpace(registrarEmail)},
+		{Role: models.SignRoleDirector, Email: strings.TrimSpace(directorEmail)},
+	}
+
+	results := make([]OfficialSignLinkDelivery, 0, len(targets))
+	for _, target := range targets {
+		if target.Email == "" {
+			continue
+		}
+
+		record, rawToken, createErr := CreateSignLink(ctx, signLinksColl, requestID, target.Role, "email", target.Email, expiryDays)
+		if createErr != nil {
+			results = append(results, OfficialSignLinkDelivery{
+				Role:           target.Role,
+				RecipientEmail: target.Email,
+				EmailSent:      false,
+				Warning:        createErr.Error(),
+			})
+			continue
+		}
+
+		signURL := fmt.Sprintf("%s/sign/%s", baseURL, rawToken)
+		sendErr := SendOfficialSignLink(ctx, string(target.Role), target.Email, signURL, requestID.Hex())
+		delivery := OfficialSignLinkDelivery{
+			Role:           target.Role,
+			RecipientEmail: target.Email,
+			SignURL:        signURL,
+			EmailSent:      sendErr == nil,
+		}
+		if sendErr != nil {
+			delivery.Warning = sendErr.Error()
+		} else {
+			_ = TouchSignLinkSent(ctx, signLinksColl, record.ID)
+		}
+
+		results = append(results, delivery)
+	}
+
+	return results, nil
 }
 
 func GetSignSessionByID(ctx context.Context, coll *mongo.Collection, id string) (*models.SignSession, error) {

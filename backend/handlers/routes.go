@@ -30,6 +30,20 @@ type signatureUpdatePayload struct {
 	SignedVia  string `json:"signed_via"`
 }
 
+type officialSignatureUpdatePayload struct {
+	DataBase64 string `json:"data_base64" binding:"required"`
+	Method     string `json:"method" binding:"required,oneof=draw upload"`
+	SignedVia  string `json:"signed_via"`
+	Decision   string `json:"decision" binding:"required,oneof=approve reject"`
+}
+
+type signSessionCompletePayload struct {
+	DataBase64 string `json:"data_base64" binding:"required"`
+	Method     string `json:"method" binding:"required,oneof=draw upload"`
+	SignedVia  string `json:"signed_via"`
+	Decision   string `json:"decision"`
+}
+
 func decodeAndValidateDataURL(input string) error {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -82,6 +96,14 @@ func toSignatureBlock(payload signatureUpdatePayload) (models.SignatureBlock, er
 		SignedVia:  signedVia,
 		SignedAt:   time.Now(),
 	}, nil
+}
+
+func toOfficialDecision(value string) (models.OfficialDecisionValue, error) {
+	decision := models.OfficialDecisionValue(strings.TrimSpace(value))
+	if !models.IsValidOfficialDecision(decision) {
+		return "", fmt.Errorf("invalid official decision")
+	}
+	return decision, nil
 }
 
 func buildPublicBaseURL(c *gin.Context) string {
@@ -142,6 +164,28 @@ func notifyAdminSubmissionAsync(record *services.RequestRecord) {
 			log.Printf("email notification error for id %v: %v", req.ID, err)
 		}
 	}(snapshot)
+}
+
+func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, publicBaseURL string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		results, err := services.CreateAndSendOfficialSignLinks(ctx, signLinksColl, officialsColl, requestID, publicBaseURL, 7)
+		if err != nil {
+			log.Printf("official sign link dispatch failed for request %s: %v", requestID.Hex(), err)
+			return
+		}
+
+		for _, result := range results {
+			if result.EmailSent {
+				continue
+			}
+			if strings.TrimSpace(result.Warning) != "" {
+				log.Printf("official sign link warning for request %s role %s: %s", requestID.Hex(), result.Role, result.Warning)
+			}
+		}
+	}()
 }
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
@@ -240,6 +284,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		if !hadStudentSignature {
 			notifyAdminSubmissionAsync(requestBefore)
+			notifyOfficialsSigningLinksAsync(objectID, signLinksColl, officialsColl, buildPublicBaseURL(c))
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "student signature saved"})
@@ -364,13 +409,23 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	r.POST("/api/sign-links/:token/sign", func(c *gin.Context) {
 		rawToken := c.Param("token")
 
-		var payload signatureUpdatePayload
+		var payload officialSignatureUpdatePayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature payload"})
 			return
 		}
 
-		sig, err := toSignatureBlock(payload)
+		sig, err := toSignatureBlock(signatureUpdatePayload{
+			DataBase64: payload.DataBase64,
+			Method:     payload.Method,
+			SignedVia:  payload.SignedVia,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		decision, err := toOfficialDecision(payload.Decision)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -397,8 +452,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		if err := services.UpsertSignature(ctx, mongoColl, record.RequestID, record.Role, sig); err != nil {
+		if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, record.RequestID, record.Role, sig, decision); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+			return
+		}
+		if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, record.RequestID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request status"})
 			return
 		}
 		if err := services.MarkSignLinkUsed(ctx, signLinksColl, record.ID); err != nil {
@@ -414,6 +473,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			RequestID string `json:"request_id"`
 			Role      string `json:"role"`
 			Token     string `json:"token"`
+			Decision  string `json:"decision"`
 		}
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sign session payload"})
@@ -426,6 +486,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		var requestID primitive.ObjectID
 		var role models.SignRole
 		var signLinkID *primitive.ObjectID
+		decision := models.OfficialDecisionValue("")
+		var err error
 
 		if strings.TrimSpace(payload.Token) != "" {
 			record, err := services.GetSignLinkByRawToken(ctx, signLinksColl, payload.Token)
@@ -442,6 +504,13 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			requestID = record.RequestID
 			role = record.Role
 			signLinkID = &record.ID
+			if role == models.SignRoleRegistrar || role == models.SignRoleDirector {
+				decision, err = toOfficialDecision(payload.Decision)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "decision is required for official QR signing"})
+					return
+				}
+			}
 		} else {
 			if strings.TrimSpace(payload.RequestID) == "" || strings.TrimSpace(payload.Role) == "" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "request_id and role are required"})
@@ -460,7 +529,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			role = models.SignRoleStudent
 		}
 
-		session, err := services.CreateSignSession(ctx, signSessionsColl, requestID, role, signLinkID, 10*time.Minute)
+		var session *models.SignSession
+		if decision != "" {
+			session, err = services.CreateDecisionSignSession(ctx, signSessionsColl, requestID, role, decision, signLinkID, 10*time.Minute)
+		} else {
+			session, err = services.CreateSignSession(ctx, signSessionsColl, requestID, role, signLinkID, 10*time.Minute)
+		}
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create sign session"})
 			return
@@ -507,13 +581,17 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	r.POST("/api/sign-sessions/:id/complete", func(c *gin.Context) {
 		sessionID := c.Param("id")
 
-		var payload signatureUpdatePayload
+		var payload signSessionCompletePayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature payload"})
 			return
 		}
 
-		sig, err := toSignatureBlock(payload)
+		sig, err := toSignatureBlock(signatureUpdatePayload{
+			DataBase64: payload.DataBase64,
+			Method:     payload.Method,
+			SignedVia:  payload.SignedVia,
+		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -553,9 +631,30 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			hadStudentSignature = hasStudentSignature(requestBefore)
 		}
 
-		if err := services.UpsertSignature(ctx, mongoColl, session.RequestID, session.Role, sig); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
-			return
+		if session.Role == models.SignRoleRegistrar || session.Role == models.SignRoleDirector {
+			decisionInput := strings.TrimSpace(payload.Decision)
+			if decisionInput == "" {
+				decisionInput = string(session.Decision)
+			}
+			decision, decisionErr := toOfficialDecision(decisionInput)
+			if decisionErr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "decision is required for official signing"})
+				return
+			}
+
+			if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, session.RequestID, session.Role, sig, decision); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+				return
+			}
+			if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, session.RequestID); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request status"})
+				return
+			}
+		} else {
+			if err := services.UpsertSignature(ctx, mongoColl, session.RequestID, session.Role, sig); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+				return
+			}
 		}
 		if session.SignLinkID != nil {
 			if err := services.MarkSignLinkUsed(ctx, signLinksColl, *session.SignLinkID); err != nil {
@@ -569,6 +668,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		if session.Role == models.SignRoleStudent && !hadStudentSignature {
 			notifyAdminSubmissionAsync(requestBefore)
+			notifyOfficialsSigningLinksAsync(session.RequestID, signLinksColl, officialsColl, buildPublicBaseURL(c))
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "signature saved", "session_id": session.ID})

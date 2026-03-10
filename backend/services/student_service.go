@@ -28,6 +28,7 @@ func SaveStudent(ctx context.Context, coll *mongo.Collection, payload models.Stu
 		"purpose":       payload.Purpose,
 		"status":        "pending", // Default status is pending
 		"signatures":    payload.Signatures,
+		"decisions":     payload.Decisions,
 		"created_at":    time.Now(),
 		"updated_at":    time.Now(),
 	})
@@ -140,6 +141,7 @@ type RequestRecord struct {
 	Purpose      string                   `json:"purpose" bson:"purpose"`
 	Status       string                   `json:"status" bson:"status"` // pending, completed, cancelled
 	Signatures   models.RequestSignatures `json:"signatures" bson:"signatures"`
+	Decisions    models.RequestDecisions  `json:"decisions,omitempty" bson:"decisions,omitempty"`
 	CreatedAt    time.Time                `json:"created_at" bson:"created_at"`
 }
 
@@ -215,6 +217,17 @@ func signaturePathByRole(role models.SignRole) (string, error) {
 	}
 }
 
+func decisionPathByRole(role models.SignRole) (string, error) {
+	switch role {
+	case models.SignRoleRegistrar:
+		return "decisions.registrar", nil
+	case models.SignRoleDirector:
+		return "decisions.director", nil
+	default:
+		return "", fmt.Errorf("unsupported decision role: %s", role)
+	}
+}
+
 // UpsertSignature stores one signature block for a given request and role.
 func UpsertSignature(ctx context.Context, coll *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock) error {
 	path, err := signaturePathByRole(role)
@@ -232,4 +245,77 @@ func UpsertSignature(ctx context.Context, coll *mongo.Collection, id interface{}
 
 	_, err = coll.UpdateOne(ctx, filter, update)
 	return err
+}
+
+// UpsertOfficialDecisionAndSignature stores one official signature and decision for a given role.
+func UpsertOfficialDecisionAndSignature(ctx context.Context, coll *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, decision models.OfficialDecisionValue) error {
+	if !models.IsValidOfficialDecision(decision) {
+		return fmt.Errorf("invalid official decision: %s", decision)
+	}
+
+	sigPath, err := signaturePathByRole(role)
+	if err != nil {
+		return err
+	}
+	decisionPath, err := decisionPathByRole(role)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	decisionRecord := models.OfficialDecision{
+		Decision:  decision,
+		DecidedAt: now,
+	}
+
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			sigPath:      sig,
+			decisionPath: decisionRecord,
+			"updated_at": now,
+		},
+	}
+
+	_, err = coll.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func hasDecision(decision *models.OfficialDecision, expected models.OfficialDecisionValue) bool {
+	return decision != nil && decision.Decision == expected
+}
+
+// ResolveStatusFromDecisions returns the request status derived from official decisions.
+func ResolveStatusFromDecisions(currentStatus string, decisions models.RequestDecisions) string {
+	if currentStatus == "cancelled" {
+		return currentStatus
+	}
+
+	if hasDecision(decisions.Registrar, models.OfficialDecisionReject) || hasDecision(decisions.Director, models.OfficialDecisionReject) {
+		return "pending"
+	}
+
+	if hasDecision(decisions.Registrar, models.OfficialDecisionApprove) && hasDecision(decisions.Director, models.OfficialDecisionApprove) {
+		return "completed"
+	}
+
+	return "pending"
+}
+
+// RecomputeStatusFromOfficialDecisions recalculates and persists status using decision fields.
+func RecomputeStatusFromOfficialDecisions(ctx context.Context, coll *mongo.Collection, id interface{}) (string, error) {
+	record, err := GetRequestByID(ctx, coll, id)
+	if err != nil {
+		return "", err
+	}
+
+	nextStatus := ResolveStatusFromDecisions(record.Status, record.Decisions)
+	if nextStatus == record.Status {
+		return nextStatus, nil
+	}
+
+	if err := UpdateRequestStatus(ctx, coll, id, nextStatus); err != nil {
+		return "", err
+	}
+	return nextStatus, nil
 }

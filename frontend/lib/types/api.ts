@@ -50,6 +50,7 @@ export type SubmitResponse = {
 export type SignatureMethod = "draw" | "upload";
 export type SignedVia = "web" | "mobile" | "qr-mobile";
 export type SignRole = "student" | "registrar" | "director";
+export type OfficialDecision = "approve" | "reject";
 
 export type SignatureBlock = {
   data_base64: string;
@@ -64,10 +65,21 @@ export type RequestSignatures = {
   director?: SignatureBlock;
 };
 
+export type OfficialDecisionBlock = {
+  decision: OfficialDecision;
+  decided_at: string;
+};
+
+export type RequestDecisions = {
+  registrar?: OfficialDecisionBlock;
+  director?: OfficialDecisionBlock;
+};
+
 export type UpdateSignatureRequestBody = {
   data_base64: string;
   method: SignatureMethod;
   signed_via?: SignedVia;
+  decision?: OfficialDecision;
 };
 
 export type CreateSignLinkRequestBody = {
@@ -110,11 +122,13 @@ export type CreateSignSessionRequestBody =
       request_id: string;
       role: "student";
       token?: never;
+      decision?: never;
     }
   | {
       token: string;
       request_id?: never;
       role?: never;
+      decision?: OfficialDecision;
     };
 
 export type CreateSignSessionResponse = {
@@ -164,6 +178,7 @@ export type RequestRecord = {
   purpose: string;
   status: RequestStatus | string;
   signatures?: RequestSignatures;
+  decisions?: RequestDecisions;
   created_at: string;
 };
 

@@ -32,12 +32,13 @@ type SignLink struct {
 
 // SignSession tracks desktop QR handoff status.
 type SignSession struct {
-	ID          string              `bson:"_id" json:"id"`
-	RequestID   primitive.ObjectID  `bson:"request_id" json:"request_id"`
-	Role        SignRole            `bson:"role" json:"role"`
-	SignLinkID  *primitive.ObjectID `bson:"sign_link_id,omitempty" json:"sign_link_id,omitempty"`
-	Status      string              `bson:"status" json:"status"` // pending | completed | expired
-	ExpiresAt   time.Time           `bson:"expires_at" json:"expires_at"`
-	CreatedAt   time.Time           `bson:"created_at" json:"created_at"`
-	CompletedAt *time.Time          `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
+	ID          string                `bson:"_id" json:"id"`
+	RequestID   primitive.ObjectID    `bson:"request_id" json:"request_id"`
+	Role        SignRole              `bson:"role" json:"role"`
+	Decision    OfficialDecisionValue `bson:"decision,omitempty" json:"decision,omitempty"`
+	SignLinkID  *primitive.ObjectID   `bson:"sign_link_id,omitempty" json:"sign_link_id,omitempty"`
+	Status      string                `bson:"status" json:"status"` // pending | completed | expired
+	ExpiresAt   time.Time             `bson:"expires_at" json:"expires_at"`
+	CreatedAt   time.Time             `bson:"created_at" json:"created_at"`
+	CompletedAt *time.Time            `bson:"completed_at,omitempty" json:"completed_at,omitempty"`
 }
