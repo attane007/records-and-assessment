@@ -1,17 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Sarabun } from "next/font/google";
 import "./globals.css";
 
 const siteUrl = "https://pp1.krufame.work";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const sarabun = Sarabun({
+  variable: "--font-sarabun",
+  subsets: ["thai", "latin"],
+  weight: ["300", "400", "500", "700"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -97,7 +94,7 @@ export default function RootLayout({
   return (
     <html lang="th" className="overflow-x-hidden">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased w-full overflow-x-hidden`}
+        className={`${sarabun.variable} antialiased w-full overflow-x-hidden`}
       >
         {children}
       </body>
