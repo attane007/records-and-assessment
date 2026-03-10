@@ -41,6 +41,7 @@ export default function SignatureCapturePanel({
   const [qrImage, setQrImage] = useState("");
   const [qrLoading, setQrLoading] = useState(false);
   const [qrMessage, setQrMessage] = useState("");
+  const [consent, setConsent] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -258,13 +259,18 @@ export default function SignatureCapturePanel({
           ? { data_base64: drawData, method: "draw", signed_via: isMobile ? "mobile" : "web" }
           : null
         : method === "upload"
-        ? uploadData
-          ? { data_base64: uploadData, method: "upload", signed_via: isMobile ? "mobile" : "web" }
-          : null
-        : null;
+          ? uploadData
+            ? { data_base64: uploadData, method: "upload", signed_via: isMobile ? "mobile" : "web" }
+            : null
+          : null;
 
     if (!payload) {
       setError("กรุณาเตรียมลายเซ็นต์ก่อนกดยืนยัน");
+      return;
+    }
+
+    if (!consent) {
+      setError("กรุณากดยืนยันยินยอมการลงนามอิเล็กทรอนิกส์");
       return;
     }
 
@@ -299,11 +305,10 @@ export default function SignatureCapturePanel({
                 void startQrSession();
               }
             }}
-            className={`rounded-xl border px-3 py-2 text-left transition ${
-              method === item.id
+            className={`rounded-xl border px-3 py-2 text-left transition ${method === item.id
                 ? "border-cyan-500 bg-cyan-50 text-cyan-900 dark:border-cyan-400 dark:bg-cyan-900/20 dark:text-cyan-200"
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-            }`}
+              }`}
           >
             <div className="text-sm font-semibold">{item.label}</div>
             <div className="text-xs opacity-80">{item.hint}</div>
@@ -401,14 +406,31 @@ export default function SignatureCapturePanel({
       ) : null}
 
       {method !== "qr" ? (
-        <button
-          type="button"
-          onClick={() => void submitCurrent()}
-          disabled={saving}
-          className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-2.5 text-sm font-medium text-white shadow hover:from-blue-700 hover:to-cyan-700 disabled:opacity-60"
-        >
-          {saving ? "กำลังบันทึกลายเซ็นต์..." : submitLabel}
-        </button>
+        <div className="space-y-4 pt-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(e) => setConsent(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+              />
+              <span className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">
+                ข้าพเจ้ายืนยันการลงชื่อในเอกสารฉบับนี้ด้วยความสมัครใจ และยอมรับว่าลายมือชื่ออิเล็กทรอนิกส์นี้
+                <strong> มีผลผูกพันทางกฎหมาย</strong> ตาม พ.ร.บ. ว่าด้วยธุรกรรมทางอิเล็กทรอนิกส์
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => void submitCurrent()}
+            disabled={saving || !consent}
+            className="inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-blue-700 hover:to-cyan-700 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none sm:w-auto"
+          >
+            {saving ? "กำลังบันทึกลายเซ็นต์..." : (consent ? submitLabel : "กรุณากดยืนยันยินยอมก่อน")}
+          </button>
+        </div>
       ) : null}
     </div>
   );

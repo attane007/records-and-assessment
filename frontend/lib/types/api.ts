@@ -10,12 +10,12 @@ export type ApiErrorResponse = {
 
 export type MeResponse =
   | {
-      authenticated: true;
-      session: AdminSession;
-    }
+    authenticated: true;
+    session: AdminSession;
+  }
   | {
-      authenticated: false;
-    };
+    authenticated: false;
+  };
 
 export type LoginRequestBody = {
   username: string;
@@ -57,6 +57,7 @@ export type SignatureBlock = {
   method: SignatureMethod;
   signed_via: SignedVia;
   signed_at: string;
+  document_hash?: string;
 };
 
 export type RequestSignatures = {
@@ -68,6 +69,7 @@ export type RequestSignatures = {
 export type OfficialDecisionBlock = {
   decision: OfficialDecision;
   decided_at: string;
+  document_hash?: string;
 };
 
 export type RequestDecisions = {
@@ -119,17 +121,17 @@ export type SignLinkInfoResponse = {
 
 export type CreateSignSessionRequestBody =
   | {
-      request_id: string;
-      role: "student";
-      token?: never;
-      decision?: never;
-    }
+    request_id: string;
+    role: "student";
+    token?: never;
+    decision?: never;
+  }
   | {
-      token: string;
-      request_id?: never;
-      role?: never;
-      decision?: OfficialDecision;
-    };
+    token: string;
+    request_id?: never;
+    role?: never;
+    decision?: OfficialDecision;
+  };
 
 export type CreateSignSessionResponse = {
   session_id: string;

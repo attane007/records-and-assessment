@@ -6,8 +6,11 @@ import (
 	"time"
 
 	"backend/models"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -228,12 +231,43 @@ func decisionPathByRole(role models.SignRole) (string, error) {
 	}
 }
 
-// UpsertSignature stores one signature block for a given request and role.
-func UpsertSignature(ctx context.Context, coll *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock) error {
+// ComputeRequestHash generates a SHA-256 hash of the request data for integrity checks.
+func ComputeRequestHash(request *RequestRecord) string {
+	if request == nil {
+		return ""
+	}
+	// Concatenate key fields to form a unique string representing the document state.
+	// We exclude signature data itself to maintain a "document state at time of signing" hash.
+	raw := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s",
+		request.Prefix,
+		request.Name,
+		request.IDCard,
+		request.StudentID,
+		request.Class,
+		request.Room,
+		request.AcademicYear,
+		request.DateOfBirth,
+		request.Purpose,
+		request.CreatedAt.UTC().Format(time.RFC3339),
+	)
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+// UpsertSignature stores one signature block for a given request and role, and records an audit log.
+func UpsertSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, ipAddress, userAgent string) error {
 	path, err := signaturePathByRole(role)
 	if err != nil {
 		return err
 	}
+
+	// Fetch current state to compute hash
+	record, err := GetRequestByID(ctx, mongoColl, id)
+	if err != nil {
+		return err
+	}
+	hash := ComputeRequestHash(record)
+	sig.DocumentHash = hash
 
 	filter := bson.M{"_id": id}
 	update := bson.M{
@@ -243,12 +277,27 @@ func UpsertSignature(ctx context.Context, coll *mongo.Collection, id interface{}
 		},
 	}
 
-	_, err = coll.UpdateOne(ctx, filter, update)
-	return err
+	if _, err = mongoColl.UpdateOne(ctx, filter, update); err != nil {
+		return err
+	}
+
+	// Record Audit Log
+	audit := models.AuditLog{
+		RequestID:    record.ID.(primitive.ObjectID),
+		Role:         role,
+		Action:       "sign",
+		DocumentHash: hash,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		Timestamp:    time.Now().UTC(),
+	}
+	_ = RecordAuditLog(ctx, auditColl, audit)
+
+	return nil
 }
 
-// UpsertOfficialDecisionAndSignature stores one official signature and decision for a given role.
-func UpsertOfficialDecisionAndSignature(ctx context.Context, coll *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, decision models.OfficialDecisionValue) error {
+// UpsertOfficialDecisionAndSignature stores one official signature and decision for a given role, and records an audit log.
+func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, decision models.OfficialDecisionValue, ipAddress, userAgent string) error {
 	if !models.IsValidOfficialDecision(decision) {
 		return fmt.Errorf("invalid official decision: %s", decision)
 	}
@@ -262,10 +311,19 @@ func UpsertOfficialDecisionAndSignature(ctx context.Context, coll *mongo.Collect
 		return err
 	}
 
+	// Fetch current state to compute hash
+	record, err := GetRequestByID(ctx, mongoColl, id)
+	if err != nil {
+		return err
+	}
+	hash := ComputeRequestHash(record)
+	sig.DocumentHash = hash
+
 	now := time.Now()
 	decisionRecord := models.OfficialDecision{
-		Decision:  decision,
-		DecidedAt: now,
+		Decision:     decision,
+		DecidedAt:    now,
+		DocumentHash: hash,
 	}
 
 	filter := bson.M{"_id": id}
@@ -277,8 +335,23 @@ func UpsertOfficialDecisionAndSignature(ctx context.Context, coll *mongo.Collect
 		},
 	}
 
-	_, err = coll.UpdateOne(ctx, filter, update)
-	return err
+	if _, err = mongoColl.UpdateOne(ctx, filter, update); err != nil {
+		return err
+	}
+
+	// Record Audit Log
+	audit := models.AuditLog{
+		RequestID:    record.ID.(primitive.ObjectID),
+		Role:         role,
+		Action:       string(decision),
+		DocumentHash: hash,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		Timestamp:    time.Now().UTC(),
+	}
+	_ = RecordAuditLog(ctx, auditColl, audit)
+
+	return nil
 }
 
 func hasDecision(decision *models.OfficialDecision, expected models.OfficialDecisionValue) bool {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jung-kurt/gofpdf"
+	"github.com/skip2/go-qrcode"
 )
 
 func decodeSignatureData(raw string) ([]byte, string, error) {
@@ -70,9 +71,9 @@ func drawDecisionCircle(pdf *gofpdf.Fpdf, x, y float64, selected bool) {
 }
 
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
-// GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
 // registrarName and directorName are the names to print on signature lines.
-func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]byte, error) {
+// baseURL is the public URL used to build the verification QR code.
+func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL string) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 
 	// Page margin variables (left, right, top, bottom)
@@ -495,6 +496,38 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 
 	pdf.CellFormat(colW, 6, regDateStr, "", 0, "C", false, 0, "")
 	pdf.CellFormat(colW, 6, dirDateStr, "", 1, "C", false, 0, "")
+
+	// --- Traceability Footer (ETDA Compliance) ---
+	// Pick the most relevant hash (latest one available)
+	refHash := ComputeRequestHash(request)
+	if request.Signatures.Director != nil && request.Signatures.Director.DocumentHash != "" {
+		refHash = request.Signatures.Director.DocumentHash
+	} else if request.Signatures.Registrar != nil && request.Signatures.Registrar.DocumentHash != "" {
+		refHash = request.Signatures.Registrar.DocumentHash
+	} else if request.Signatures.Student != nil && request.Signatures.Student.DocumentHash != "" {
+		refHash = request.Signatures.Student.DocumentHash
+	}
+
+	// Draw verification QR code at the bottom left
+	if baseURL != "" && refHash != "" {
+		verifyURL := fmt.Sprintf("%s/verify?hash=%s", strings.TrimRight(baseURL, "/"), refHash)
+		qrBytes, err := qrcode.Encode(verifyURL, qrcode.Medium, 256)
+		if err == nil {
+			qrAlias := "qr-verification"
+			pdf.RegisterImageOptionsReader(qrAlias, gofpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrBytes))
+			// Draw at bottom-left margin
+			pdf.ImageOptions(qrAlias, pageMargins.Left, 270, 15, 15, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+
+			// Draw Reference Hash next to QR
+			pdf.SetFont(thaiFontFamily, "", 8)
+			pdf.SetTextColor(100, 100, 100)
+			pdf.SetXY(pageMargins.Left+17, 270+5)
+			pdf.CellFormat(0, 4, "ตรวจสอบความครบถ้วนของเอกสาร (Digital Verification Reference):", "", 1, "L", false, 0, "")
+			pdf.SetX(pageMargins.Left + 17)
+			pdf.CellFormat(0, 4, refHash, "", 1, "L", false, 0, "")
+			pdf.SetTextColor(0, 0, 0) // reset
+		}
+	}
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

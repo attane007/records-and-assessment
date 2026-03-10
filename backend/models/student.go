@@ -4,10 +4,11 @@ import "time"
 
 // SignatureBlock stores one signature entry for a role.
 type SignatureBlock struct {
-	DataBase64 string    `json:"data_base64" bson:"data_base64"`
-	Method     string    `json:"method" bson:"method"`         // draw | upload
-	SignedVia  string    `json:"signed_via" bson:"signed_via"` // web | mobile | qr-mobile
-	SignedAt   time.Time `json:"signed_at" bson:"signed_at"`
+	DataBase64   string    `json:"data_base64" bson:"data_base64"`
+	Method       string    `json:"method" bson:"method"`         // draw | upload
+	SignedVia    string    `json:"signed_via" bson:"signed_via"` // web | mobile | qr-mobile
+	SignedAt     time.Time `json:"signed_at" bson:"signed_at"`
+	DocumentHash string    `json:"document_hash,omitempty" bson:"document_hash,omitempty"` // SHA-256 of document state
 }
 
 // RequestSignatures stores signatures for each role in the workflow.
@@ -32,8 +33,9 @@ func IsValidOfficialDecision(value OfficialDecisionValue) bool {
 
 // OfficialDecision stores the selected decision with timestamp.
 type OfficialDecision struct {
-	Decision  OfficialDecisionValue `json:"decision" bson:"decision"`
-	DecidedAt time.Time             `json:"decided_at" bson:"decided_at"`
+	Decision     OfficialDecisionValue `json:"decision" bson:"decision"`
+	DecidedAt    time.Time             `json:"decided_at" bson:"decided_at"`
+	DocumentHash string                `json:"document_hash,omitempty" bson:"document_hash,omitempty"` // SHA-256 of document state
 }
 
 // RequestDecisions stores official decisions for each role.

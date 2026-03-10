@@ -47,6 +47,8 @@ func main() {
 	// collections for signing flow
 	mongoCollSignLinks := client.Database(cfg.DBName).Collection("sign_links")
 	mongoCollSignSessions := client.Database(cfg.DBName).Collection("sign_sessions")
+	// collection for audit logs
+	mongoCollAudit := client.Database(cfg.DBName).Collection("audit_logs")
 
 	// Initialize admin service and create default admin if not exists
 	adminService := services.NewAdminService(mongoCollAdmin)
@@ -74,7 +76,7 @@ func main() {
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection
-	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions)
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions, mongoCollAudit)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }

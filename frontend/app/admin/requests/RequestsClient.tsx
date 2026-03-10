@@ -14,6 +14,16 @@ import type {
   RequestStatus,
   RequestsResponse,
 } from "@/lib/types/api";
+import {
+  ShieldCheck,
+  History,
+  X,
+  Clock,
+  User,
+  Globe,
+  Search,
+  FileText
+} from "lucide-react";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -71,6 +81,17 @@ function isOfficialsPayload(value: unknown): value is OfficialsPayload {
 
 type OfficialRole = "registrar" | "director";
 
+type AuditLog = {
+  id: string;
+  request_id: string;
+  role: string;
+  action: string;
+  document_hash: string;
+  ip_address: string;
+  user_agent: string;
+  timestamp: string;
+};
+
 export default function RequestsClient() {
   const router = useRouter();
   const [session, setSession] = useState<AdminSession | null>(null);
@@ -89,6 +110,13 @@ export default function RequestsClient() {
   });
   const searchParams = useSearchParams();
   const pageParam = searchParams?.get("page") ?? "1";
+
+  // Audit Log State
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
+  const [activeAuditRequest, setActiveAuditRequest] = useState<RequestRecord | null>(null);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -290,6 +318,13 @@ export default function RequestsClient() {
     return data;
   };
 
+  const handleCopyRoleLink = async (role: OfficialRole, currentLinks = modalLinks) => {
+    const link = currentLinks[role]?.sign_url;
+    if (!link) return;
+    const copied = await copyText(link);
+    setLinksModalCopyMessage(copied ? `คัดลอกลิงก์${role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}แล้ว` : "คัดลอกไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
+  };
+
   const copyLinkBundle = async (links: Record<OfficialRole, CreateSignLinkResponse | null>) => {
     if (!links.registrar || !links.director) return;
     const text = `ลิงก์นายทะเบียน: ${links.registrar.sign_url}\nลิงก์ผู้อำนวยการ: ${links.director.sign_url}`;
@@ -336,13 +371,6 @@ export default function RequestsClient() {
     setModalLinks({ registrar: null, director: null });
   };
 
-  const handleCopyRoleLink = async (role: OfficialRole, currentLinks = modalLinks) => {
-    const link = currentLinks[role]?.sign_url;
-    if (!link) return;
-    const copied = await copyText(link);
-    setLinksModalCopyMessage(copied ? `คัดลอกลิงก์${role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}แล้ว` : "คัดลอกไม่สำเร็จ กรุณาคัดลอกด้วยตนเอง");
-  };
-
   const handleSendRoleEmail = async (role: OfficialRole) => {
     if (!activeModalRequest) return;
 
@@ -362,6 +390,47 @@ export default function RequestsClient() {
     } finally {
       setSendingRole(null);
     }
+  };
+
+  const openAuditModal = async (request: RequestRecord) => {
+    setActiveAuditRequest(request);
+    setAuditModalOpen(true);
+    setAuditLoading(true);
+    setAuditError("");
+    setAuditLogs([]);
+
+    const hashes = [
+      request.signatures?.director?.document_hash,
+      request.signatures?.registrar?.document_hash,
+      request.signatures?.student?.document_hash,
+      request.decisions?.director?.document_hash,
+      request.decisions?.registrar?.document_hash
+    ].filter((h): h is string => !!h);
+
+    if (hashes.length === 0) {
+      setAuditError("ยังไม่มีประวัติการลงนามสำหรับคำร้องนี้");
+      setAuditLoading(false);
+      return;
+    }
+
+    const targetHash = hashes[0];
+
+    try {
+      const res = await fetch(`/api/verify?hash=${encodeURIComponent(targetHash as string)}`);
+      if (!res.ok) throw new Error("ไม่สามารถเรียกดูประวัติได้");
+      const data = await res.json();
+      setAuditLogs(data.logs || []);
+    } catch (err) {
+      setAuditError("เกิดข้อผิดพลาดในการโหลดข้อมูลประวัติ");
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const closeAuditModal = () => {
+    setAuditModalOpen(false);
+    setActiveAuditRequest(null);
+    setAuditLogs([]);
   };
 
   if (!session) {
@@ -572,6 +641,13 @@ export default function RequestsClient() {
                       </svg>
                       ยกเลิก
                     </button>
+                    <button
+                      onClick={() => void openAuditModal(request)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      ประวัติ
+                    </button>
                   </div>
                 </div>
               ))
@@ -720,6 +796,14 @@ export default function RequestsClient() {
                                 </svg>
                                 ยกเลิก
                               </button>
+                              <button
+                                onClick={() => void openAuditModal(request)}
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
+                                title="ดูประวัติการลงนาม (Audit Trail)"
+                              >
+                                <History className="w-3 h-3" />
+                                ประวัติ
+                              </button>
                             </div>
                           </div>
                         </td>
@@ -742,65 +826,67 @@ export default function RequestsClient() {
                   )}
                 </tbody>
               </table>
-            </div>
-          </div>
+            </div >
+          </div >
 
           {/* Pagination */}
-          {data.pages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-700/50 rounded-2xl shadow-sm">
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                หน้า {data.page} จาก {data.pages}
-              </span>
-              <div className="flex items-center gap-1.5 flex-wrap justify-center">
-                {data.page > 1 && (
-                  <Link
-                    href={`/admin/requests?page=${data.page - 1}`}
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  >
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    ก่อนหน้า
-                  </Link>
-                )}
-
-                {/* Page numbers */}
-                {Array.from({ length: Math.min(5, data.pages) }, (_, i) => {
-                  const pageNum = Math.max(1, Math.min(data.pages - 4, data.page - 2)) + i;
-                  if (pageNum > data.pages) return null;
-
-                  return (
+          {
+            data.pages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-700/50 rounded-2xl shadow-sm">
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  หน้า {data.page} จาก {data.pages}
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                  {data.page > 1 && (
                     <Link
-                      key={pageNum}
-                      href={`/admin/requests?page=${pageNum}`}
-                      className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${pageNum === data.page
-                        ? 'bg-cyan-500 text-white'
-                        : 'text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
-                        }`}
+                      href={`/admin/requests?page=${data.page - 1}`}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                     >
-                      {pageNum}
+                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      ก่อนหน้า
                     </Link>
-                  );
-                })}
+                  )}
 
-                {data.page < data.pages && (
-                  <Link
-                    href={`/admin/requests?page=${data.page + 1}`}
-                    className="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                  >
-                    ถัดไป
-                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
-                )}
+                  {/* Page numbers */}
+                  {Array.from({ length: Math.min(5, data.pages) }, (_, i) => {
+                    const pageNum = Math.max(1, Math.min(data.pages - 4, data.page - 2)) + i;
+                    if (pageNum > data.pages) return null;
+
+                    return (
+                      <Link
+                        key={pageNum}
+                        href={`/admin/requests?page=${pageNum}`}
+                        className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${pageNum === data.page
+                          ? 'bg-cyan-500 text-white'
+                          : 'text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                          }`}
+                      >
+                        {pageNum}
+                      </Link>
+                    );
+                  })}
+
+                  {data.page < data.pages && (
+                    <Link
+                      href={`/admin/requests?page=${data.page + 1}`}
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    >
+                      ถัดไป
+                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </main>
+            )
+          }
+        </div >
+      </main >
 
-      {linksModalOpen ? (
+      {linksModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
           <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-4">
@@ -900,7 +986,95 @@ export default function RequestsClient() {
             </div>
           </div>
         </div>
-      ) : null}
+      )}
+
+      {/* Audit Log Modal */}
+      {auditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-cyan-100 dark:bg-cyan-900/50 rounded-xl">
+                  <History className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">บันทึกประวัติการลงนาม</h2>
+                  <p className="text-xs text-slate-500">Audit Trail: {activeAuditRequest?.prefix} {activeAuditRequest?.name}</p>
+                </div>
+              </div>
+              <button onClick={closeAuditModal} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {auditLoading ? (
+                <div className="py-20 text-center">
+                  <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                  <p className="text-sm text-slate-500">กำลังโหลดประวัติ...</p>
+                </div>
+              ) : auditError ? (
+                <div className="py-20 text-center space-y-4">
+                  <ShieldCheck className="mx-auto h-12 w-12 text-slate-300" />
+                  <p className="text-slate-500 font-medium">{auditError}</p>
+                </div>
+              ) : (
+                <div className="relative space-y-6 before:absolute before:left-8 before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-slate-100 dark:before:bg-slate-800">
+                  {auditLogs.map((log, idx) => (
+                    <div key={log.id} className="relative pl-16">
+                      <div className="absolute left-4 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-bold border border-slate-200 dark:border-slate-700">
+                        {idx + 1}
+                      </div>
+                      <div className="rounded-2xl bg-white dark:bg-slate-950 p-5 border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-800 pb-3 mb-3">
+                          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider">
+                            <User className="h-3 w-3 text-cyan-600" />
+                            {log.role === 'student' ? 'ผู้ยื่นคำร้อง' : log.role === 'registrar' ? 'นายทะเบียน' : 'ผู้อำนวยการ'}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                            <Clock className="h-3 w-3" />
+                            {new Date(log.timestamp).toLocaleString("th-TH")}
+                          </div>
+                        </div>
+
+                        <p className="mb-4 text-sm font-semibold text-cyan-700 dark:text-cyan-400">
+                          {log.action === 'sign' ? 'ลงลายมือชื่อ' : log.action === 'approve' ? 'อนุมัติคำร้อง' : 'ปฏิเสธคำร้อง'}
+                        </p>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800">
+                            <FileText className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span className="text-[10px] text-slate-500 font-mono truncate" title={log.document_hash}>HASH: {log.document_hash}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500">
+                              <Globe className="h-3 w-3" />
+                              IP: {log.ip_address}
+                            </div>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500 max-w-full">
+                              <Search className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{log.user_agent}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800">
+              <p className="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
+                Immutable Record Protection • ETDA Compliant
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

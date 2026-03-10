@@ -189,7 +189,7 @@ func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksCol
 }
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection, auditColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -277,7 +277,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		}
 		hadStudentSignature := hasStudentSignature(requestBefore)
 
-		if err := services.UpsertSignature(ctx, mongoColl, objectID, models.SignRoleStudent, sig); err != nil {
+		if err := services.UpsertSignature(ctx, mongoColl, auditColl, objectID, models.SignRoleStudent, sig, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
 		}
@@ -452,7 +452,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, record.RequestID, record.Role, sig, decision); err != nil {
+		if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, record.RequestID, record.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
 		}
@@ -642,7 +642,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 				return
 			}
 
-			if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, session.RequestID, session.Role, sig, decision); err != nil {
+			if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 				return
 			}
@@ -651,7 +651,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 				return
 			}
 		} else {
-			if err := services.UpsertSignature(ctx, mongoColl, session.RequestID, session.Role, sig); err != nil {
+			if err := services.UpsertSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 				return
 			}
@@ -737,8 +737,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			registrarName, directorName = services.GetOfficials()
 		}
 
-		// Generate PDF via service (pass official names)
-		pdfBytes, err := services.GeneratePDF(request, registrarName, directorName)
+		// Generate PDF via service (pass official names and base URL for verification QR)
+		pdfBytes, err := services.GeneratePDF(request, registrarName, directorName, buildPublicBaseURL(c))
 		if err != nil {
 			log.Printf("pdf generation error for id %s: %v", idStr, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate PDF"})
@@ -916,5 +916,47 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "password updated successfully"})
+	})
+
+	// GET /api/verify - Verification endpoint for QR codes and manual hash checking
+	r.GET("/api/verify", func(c *gin.Context) {
+		hash := c.Query("hash")
+		if hash == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "hash is required"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		logs, err := services.GetAuditLogsByHash(ctx, auditColl, hash)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to search audit logs"})
+			return
+		}
+
+		if len(logs) == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no audit records found for this hash"})
+			return
+		}
+
+		// Optionally fetch basic request info if logs exist
+		var requestInfo gin.H
+		request, err := services.GetRequestByID(ctx, mongoColl, logs[0].RequestID)
+		if err == nil {
+			requestInfo = gin.H{
+				"prefix":        request.Prefix,
+				"name":          request.Name,
+				"document_type": request.DocumentType,
+				"purpose":       request.Purpose,
+				"created_at":    request.CreatedAt,
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"hash":    hash,
+			"logs":    logs,
+			"request": requestInfo,
+		})
 	})
 }
