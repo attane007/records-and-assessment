@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import type { ApiErrorResponse, SubmitRequestBody, ValidationErrorResponse } from "@/lib/types/api";
 
 // validate Thai national ID (13 digits with checksum)
 function isValidThaiID(s: string) {
@@ -18,39 +19,86 @@ function isValidThaiID(s: string) {
 
 type FormState = {
   name: string;
-  lastname?: string;
-  prefix?: string;
+  lastname: string;
+  prefix: string;
   id_card: string;
-  student_id?: string;
+  student_id: string;
   date_of_birth: string;
   purpose: string;
-  document_type?: string;
-  class?: string;
-  room?: string;
-  academic_year?: string;
-  father_name?: string;
-  mother_name?: string;
+  document_type: string;
+  class: string;
+  room: string;
+  academic_year: string;
+  father_name: string;
+  mother_name: string;
 };
 
-export default function Home() {
-  const [form, setForm] = useState<FormState>({
-    name: "",
-    lastname: "",
-    prefix: "",
-    id_card: "",
-    student_id: "",
-    date_of_birth: "",
-    purpose: "",
+type FormField = keyof FormState;
+type FormErrors = Partial<Record<FormField, string>>;
+
+type SubmitStatus =
+  | { kind: "idle" }
+  | { kind: "success"; message: string }
+  | { kind: "error"; message: string };
+
+const EMPTY_FORM: FormState = {
+  name: "",
+  lastname: "",
+  prefix: "",
+  id_card: "",
+  student_id: "",
+  date_of_birth: "",
+  purpose: "",
   document_type: "",
-    class: "",
-    room: "",
-    academic_year: "",
-    father_name: "",
-    mother_name: "",
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<string | null>(null);
-  const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
+  class: "",
+  room: "",
+  academic_year: "",
+  father_name: "",
+  mother_name: "",
+};
+
+const REQUIRED_FIELDS = [
+  "name",
+  "lastname",
+  "id_card",
+  "date_of_birth",
+  "purpose",
+  "prefix",
+  "document_type",
+] as const satisfies ReadonlyArray<FormField>;
+
+const FORM_FIELD_SET = new Set<FormField>(Object.keys(EMPTY_FORM) as FormField[]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFormField(value: string): value is FormField {
+  return FORM_FIELD_SET.has(value as FormField);
+}
+
+function toFormErrors(rawErrors: Partial<Record<string, string>>): FormErrors {
+  const next: FormErrors = {};
+  for (const [key, value] of Object.entries(rawErrors)) {
+    if (isFormField(key) && typeof value === "string" && value.trim() !== "") {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function isValidationErrorResponse(data: unknown): data is ValidationErrorResponse {
+  return isRecord(data) && "errors" in data && isRecord(data.errors);
+}
+
+function isApiErrorResponse(data: unknown): data is ApiErrorResponse {
+  return isRecord(data) && typeof data.error === "string";
+}
+
+export default function Home() {
+  const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM }));
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [status, setStatus] = useState<SubmitStatus>({ kind: "idle" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -58,23 +106,30 @@ export default function Home() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
+    if (!isFormField(name)) return;
+
     const nextVal = name === "id_card" ? value.replace(/\D/g, "") : value;
     setForm((s) => ({ ...s, [name]: nextVal }));
-    setErrors((er) => ({ ...er, [name]: "" }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setStatus(null);
+    setStatus({ kind: "idle" });
     setErrors({});
 
-  // basic client-side required check
-  const required = ["name", "lastname", "id_card", "date_of_birth", "purpose", "prefix", "document_type"];
-    const missing: Record<string, string> = {};
-    for (const k of required) {
-      // @ts-ignore
-      if (!form[k] || form[k].toString().trim() === "") missing[k] = "field is required";
+    // basic client-side required check
+    const missing: FormErrors = {};
+    for (const key of REQUIRED_FIELDS) {
+      if (form[key].trim() === "") {
+        missing[key] = "field is required";
+      }
     }
+
     if (Object.keys(missing).length) {
       setErrors(missing);
       return;
@@ -83,19 +138,28 @@ export default function Home() {
     // validate Thai ID checksum on the client
     if (!isValidThaiID(form.id_card)) {
       setErrors((prev) => ({ ...prev, id_card: "เลขบัตรประชาชนไม่ถูกต้อง (13 หลัก พร้อม checksum)" }));
-  setLoading(false);
-  setStatus("เลขบัตรประชาชนไม่ถูกต้อง (13 หลัก)");
-  setStatusType('error');
+      setStatus({ kind: "error", message: "เลขบัตรประชาชนไม่ถูกต้อง (13 หลัก)" });
       return;
     }
 
     setLoading(true);
     try {
-  // Keep prefix as its own field and send name without the prefix to avoid duplication
-  const payload: any = { ...form };
-  payload.name = `${form.name}${form.lastname ? " " + form.lastname : ""}`.trim();
-    // remove the temporary lastname property so payload shape matches previous API
-    delete payload.lastname;
+      // Keep prefix as its own field and send name without the prefix to avoid duplication.
+      const payload: SubmitRequestBody = {
+        name: `${form.name}${form.lastname ? ` ${form.lastname}` : ""}`.trim(),
+        prefix: form.prefix,
+        id_card: form.id_card,
+        date_of_birth: form.date_of_birth,
+        purpose: form.purpose,
+        document_type: form.document_type,
+      };
+
+      if (form.student_id.trim() !== "") payload.student_id = form.student_id.trim();
+      if (form.class.trim() !== "") payload.class = form.class.trim();
+      if (form.room.trim() !== "") payload.room = form.room.trim();
+      if (form.academic_year.trim() !== "") payload.academic_year = form.academic_year.trim();
+      if (form.father_name.trim() !== "") payload.father_name = form.father_name.trim();
+      if (form.mother_name.trim() !== "") payload.mother_name = form.mother_name.trim();
 
       const res = await fetch("/api/submit", {
         method: "POST",
@@ -103,40 +167,25 @@ export default function Home() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data: unknown = await res.json().catch(() => null);
       if (!res.ok) {
         // backend returns { errors: { field: message } } for validation
-        if (data && data.errors) {
-          setErrors(data.errors);
-          setStatus("กรุณาตรวจสอบข้อมูลที่กรอก");
-          setStatusType('error');
-        } else if (data && data.error) {
-          setStatus(data.error);
-          setStatusType('error');
+        if (isValidationErrorResponse(data)) {
+          setErrors(toFormErrors(data.errors));
+          setStatus({ kind: "error", message: "กรุณาตรวจสอบข้อมูลที่กรอก" });
+        } else if (isApiErrorResponse(data)) {
+          setStatus({ kind: "error", message: data.error });
         } else {
-          setStatus("unexpected error");
-          setStatusType('error');
+          setStatus({ kind: "error", message: "unexpected error" });
         }
       } else {
-        setStatus("บันทึกข้อมูลเรียบร้อย");
-        setStatusType('success');
-        setForm({
-          name: "",
-          id_card: "",
-          date_of_birth: "",
-          purpose: "",
-          document_type: "",
-          class: "",
-          room: "",
-          academic_year: "",
-          father_name: "",
-          mother_name: "",
-        });
-  setSubmitted(true);
+        setStatus({ kind: "success", message: "บันทึกข้อมูลเรียบร้อย" });
+        setForm({ ...EMPTY_FORM });
+        setSubmitted(true);
       }
     } catch (err) {
-      setStatus("network error: " + (err as Error).message);
-      setStatusType('error');
+      const message = err instanceof Error ? err.message : "unknown error";
+      setStatus({ kind: "error", message: `network error: ${message}` });
     } finally {
       setLoading(false);
     }
@@ -144,13 +193,12 @@ export default function Home() {
 
   // auto-dismiss status toast after a short delay
   useEffect(() => {
-    if (!status) return;
+    if (status.kind === "idle") return;
     const t = setTimeout(() => {
-      setStatus(null);
-      setStatusType(null);
+      setStatus({ kind: "idle" });
     }, 4000);
     return () => clearTimeout(t);
-  }, [status]);
+  }, [status.kind]);
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
@@ -319,11 +367,11 @@ export default function Home() {
                       </Field>
                     </div>
 
-                    {status && (
+                    {status.kind !== "idle" && (
                       <div
-                        className={`rounded-lg px-4 py-3 text-sm ${statusClasses(status)}`}
+                        className={`rounded-lg px-4 py-3 text-sm ${statusClasses(status.kind)}`}
                       >
-                        {status}
+                        {status.message}
                       </div>
                     )}
 
@@ -333,7 +381,7 @@ export default function Home() {
                         disabled={loading}
                         className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-4 py-2 text-sm font-medium shadow-md hover:from-cyan-700 hover:to-indigo-700 focus:ring-2 ring-cyan-300 disabled:opacity-60 cursor-pointer"
                       >
-                        {loading ? "กำลังบันทึก..." : statusType === 'success' ? 'เรียบร้อย' : 'บันทึกข้อมูล'}
+                        {loading ? "กำลังบันทึก..." : status.kind === "success" ? "เรียบร้อย" : "บันทึกข้อมูล"}
                       </button>
                       <button
                         type="button"
@@ -354,7 +402,7 @@ export default function Home() {
                             mother_name: "",
                           });
                           setErrors({});
-                          setStatus(null);
+                          setStatus({ kind: "idle" });
                         }}
                         className="inline-flex items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-700 dark:text-slate-200 px-3 py-2 text-sm hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer"
                       >
@@ -376,8 +424,7 @@ export default function Home() {
                         type="button"
                         onClick={() => {
                           setSubmitted(false);
-                          setStatus(null);
-                          setStatusType(null);
+                          setStatus({ kind: "idle" });
                         }}
                         className="inline-flex items-center justify-center rounded-lg border border-blue-500 px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/20"
                       >
@@ -412,9 +459,9 @@ export default function Home() {
       </main>
 
       {/* Toast container */}
-      {status && (
-        <div className={`fixed top-[4.5rem] right-2 sm:right-3 lg:right-4 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${statusType === 'success' ? 'bg-emerald-100 border border-emerald-300 text-emerald-800' : 'bg-red-100 border border-red-300 text-red-800'}`}>
-          {status}
+      {status.kind !== "idle" && (
+        <div className={`fixed top-[4.5rem] right-2 sm:right-3 lg:right-4 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${status.kind === "success" ? "bg-emerald-100 border border-emerald-300 text-emerald-800" : "bg-red-100 border border-red-300 text-red-800"}`}>
+          {status.message}
         </div>
       )}
 
@@ -456,7 +503,7 @@ function PanelContent({ children }: { children: ReactNode }) {
   return <div className="p-4 sm:p-5">{children}</div>;
 }
 
-function Field({ label, children, help, error }: { label: string; children: ReactNode; help?: string; error?: string }) {
+function Field({ label, children, help, error }: { label: string; children: ReactNode; help?: string | undefined; error?: string | undefined }) {
   return (
     <label className="flex flex-col">
       <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{label}</span>
@@ -482,10 +529,8 @@ const inputCls =
 const headerChipCls =
   "inline-flex items-center gap-1 rounded-md border border-slate-300/70 dark:border-slate-600/70 px-2 py-1 text-slate-700 dark:text-slate-200 bg-slate-100/70 dark:bg-slate-800/30 hover:bg-slate-200/80 dark:hover:bg-slate-700/50 transition";
 
-function statusClasses(msg: string) {
-  const lower = msg.toLowerCase();
-  const isError = lower.includes("error") || lower.includes("ผิดพลาด") || lower.includes("unexpected");
-  return isError
+function statusClasses(kind: "success" | "error") {
+  return kind === "error"
     ? "border border-red-300 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
     : "border border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300";
 }
@@ -493,7 +538,7 @@ function statusClasses(msg: string) {
 // Thai calendar date picker (B.E. display, stores ISO yyyy-mm-dd)
 function ThaiDatePicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
+  const [, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties | null>(null);
   type ViewMode = "date" | "month" | "year";

@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
+const siteUrl = "https://pp1.krufame.work";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,6 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "คำร้องขอ ปพ.1/ปพ.7",
     template: "%s | ระบบบันทึกคำร้อง ปพ.1/ปพ.7",
@@ -28,7 +31,7 @@ export const metadata: Metadata = {
     "โรงเรียน",
   ],
   authors: [
-    { name: "ระบบคำร้อง ปพ.1/ปพ.7", url: "https://pp1.krufame.work" },
+    { name: "ระบบคำร้อง ปพ.1/ปพ.7", url: siteUrl },
   ],
   creator: "records-and-assessment",
   publisher: "records-and-assessment",
@@ -37,7 +40,7 @@ export const metadata: Metadata = {
     title: "คำร้องขอ ปพ.1/ปพ.7",
     description:
       "จัดการคำร้อง ปพ.1 และ ปพ.7 ออนไลน์ — สร้าง ดาวน์โหลด และติดตามสถานะคำร้อง",
-  url: "https://pp1.krufame.work",
+    url: siteUrl,
     siteName: "ระบบคำร้อง ปพ.1/ปพ.7",
     images: [
       {
@@ -63,7 +66,6 @@ export const metadata: Metadata = {
     shortcut: "/logo-ppk-512x512-1.ico",
     apple: "/logo-ppk-512x512-1.ico",
   },
-  themeColor: [{ media: "(prefers-color-scheme: light)", color: "#ffffff" }, { media: "(prefers-color-scheme: dark)", color: "#000000" }],
   robots: {
     index: true,
     follow: true,
@@ -73,11 +75,18 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-  canonical: "https://pp1.krufame.work",
+    canonical: siteUrl,
     languages: {
       "th-TH": "/",
     },
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 };
 
 export default function RootLayout({

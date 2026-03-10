@@ -6,7 +6,7 @@ export async function GET(req: Request) {
     const session = await getSessionFromRequest(req);
     if (!session) return NextResponse.json({ authenticated: false }, { status: 401 });
     return NextResponse.json({ authenticated: true, session });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ authenticated: false }, { status: 500 });
   }
 }

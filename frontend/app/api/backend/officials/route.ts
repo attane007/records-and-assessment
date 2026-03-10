@@ -2,32 +2,32 @@ import { NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
 
-async function forward(path: string, method: string, body?: any, incomingHeaders?: Headers) {
+async function forward(path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown, incomingHeaders?: Headers) {
   const url = `${BACKEND_URL}${path}`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers = new Headers({ 'Content-Type': 'application/json' });
 
   if (incomingHeaders) {
-    const cookie = incomingHeaders.get?.('cookie') || '';
-    const host = incomingHeaders.get?.('host') || '';
-    if (cookie) headers['cookie'] = cookie;
-    if (host) headers['x-forwarded-host'] = host;
+    const cookie = incomingHeaders.get('cookie') || '';
+    const host = incomingHeaders.get('host') || '';
+    if (cookie) headers.set('cookie', cookie);
+    if (host) headers.set('x-forwarded-host', host);
   }
 
   const fetchOptions: RequestInit = {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
   };
+  if (body !== undefined && body !== null) {
+    fetchOptions.body = JSON.stringify(body);
+  }
 
   try {
     const res = await fetch(url, fetchOptions);
     const text = await res.text();
-    let data: any;
+    let data: unknown;
     try {
       data = text ? JSON.parse(text) : null;
-    } catch (e) {
+    } catch {
       data = text;
     }
 
@@ -41,15 +41,15 @@ async function forward(path: string, method: string, body?: any, incomingHeaders
 
 export async function GET(req: Request) {
   // Forward GET /api/officials and include incoming headers
-  return forward('/api/officials', 'GET', undefined, req.headers as Headers);
+  return forward('/api/officials', 'GET', undefined, req.headers);
 }
 
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  return forward('/api/officials', 'POST', body, req.headers as Headers);
+  const body: unknown = await req.json().catch(() => null);
+  return forward('/api/officials', 'POST', body, req.headers);
 }
 
 export async function PUT(req: Request) {
-  const body = await req.json().catch(() => null);
-  return forward('/api/officials', 'PUT', body, req.headers as Headers);
+  const body: unknown = await req.json().catch(() => null);
+  return forward('/api/officials', 'PUT', body, req.headers);
 }

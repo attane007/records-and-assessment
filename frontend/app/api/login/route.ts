@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { createSessionToken } from "@/lib/session";
+import type { LoginRequestBody } from "@/lib/types/api";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isLoginRequestBody(value: unknown): value is LoginRequestBody {
+  if (!isRecord(value)) return false;
+  return typeof value.username === "string" && typeof value.password === "string";
+}
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
+    const body: unknown = await req.json().catch(() => null);
+    if (!isLoginRequestBody(body)) {
+      return NextResponse.json({ error: "missing credentials" }, { status: 400 });
+    }
+
+    const username = body.username.trim();
+    const password = body.password;
     
     if (!username || !password) {
       return NextResponse.json({ error: "missing credentials" }, { status: 400 });
@@ -35,8 +51,8 @@ export async function POST(req: Request) {
       maxAge: 60 * 60 * 8,
     });
     return res;
-  } catch (e) {
-    console.error("Login error:", e);
+  } catch (error) {
+    console.error("Login error:", error);
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
 }

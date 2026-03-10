@@ -1,5 +1,19 @@
 import { NextResponse } from "next/server";
 import { getSessionFromCookies } from "@/lib/session";
+import type { ApiErrorResponse, ChangePasswordRequestBody } from "@/lib/types/api";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return isRecord(value) && typeof value.error === "string";
+}
+
+function isChangePasswordRequestBody(value: unknown): value is ChangePasswordRequestBody {
+  if (!isRecord(value)) return false;
+  return typeof value.currentPassword === "string" && typeof value.newPassword === "string";
+}
 
 export async function POST(req: Request) {
   try {
@@ -9,7 +23,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const { currentPassword, newPassword } = await req.json();
+    const body: unknown = await req.json().catch(() => null);
+    if (!isChangePasswordRequestBody(body)) {
+      return NextResponse.json({ error: "current password and new password are required" }, { status: 400 });
+    }
+
+    const currentPassword = body.currentPassword;
+    const newPassword = body.newPassword;
     
     if (!currentPassword || !newPassword) {
       return NextResponse.json({ error: "current password and new password are required" }, { status: 400 });
@@ -33,15 +53,16 @@ export async function POST(req: Request) {
       }),
     });
 
-    const data = await response.json();
+    const data: unknown = await response.json().catch(() => null);
 
     if (!response.ok) {
-      return NextResponse.json({ error: data.error || "failed to change password" }, { status: response.status });
+      const message = isApiErrorResponse(data) ? data.error : "failed to change password";
+      return NextResponse.json({ error: message }, { status: response.status });
     }
 
     return NextResponse.json({ message: "password changed successfully" });
-  } catch (e) {
-    console.error("Change password error:", e);
+  } catch (error) {
+    console.error("Change password error:", error);
     return NextResponse.json({ error: "internal server error" }, { status: 500 });
   }
 }

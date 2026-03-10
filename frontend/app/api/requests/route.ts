@@ -1,13 +1,14 @@
 import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
+
 async function proxyFetch(path: string, init?: RequestInit) {
   const url = `${backendUrl}${path}`;
   const res = await fetch(url, init);
 
   // For non-OK responses, mirror status and body
-  const headers: Record<string, string> = {};
-  res.headers.forEach((v, k) => (headers[k] = v));
+  const headers = new Headers();
+  res.headers.forEach((v, k) => headers.set(k, v));
 
   const body = await res.arrayBuffer();
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
     };
 
     return await proxyFetch(path, init);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
 }
@@ -53,7 +54,7 @@ export async function PUT(req: NextRequest) {
     };
 
     return await proxyFetch(forwardPath, init);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
 }
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
     };
 
     return await proxyFetch(forwardPath, init);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
 }

@@ -1,68 +1,78 @@
 "use client";
 
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import AdminNavbar from "@/components/AdminNavbar";
+import type { AdminSession, MeResponse, RequestStatus, RequestsResponse } from "@/lib/types/api";
 
-interface RequestRecord {
-  id: string;
-  prefix: string;
-  name: string;
-  document_type: string;
-  id_card: string;
-  student_id?: string;
-  date_of_birth: string;
-  class?: string;
-  room?: string;
-  academic_year?: string;
-  father_name?: string;
-  mother_name?: string;
-  purpose: string;
-  status: string; // pending, completed, cancelled
-  created_at: string;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
-interface RequestsResponse {
-  requests: RequestRecord[];
-  total: number;
-  page: number;
-  limit: number;
-  pages: number;
+function isAdminSession(value: unknown): value is AdminSession {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.sub === "string" &&
+    typeof value.username === "string" &&
+    typeof value.exp === "number"
+  );
+}
+
+function isMeResponse(value: unknown): value is MeResponse {
+  if (!isRecord(value) || typeof value.authenticated !== "boolean") return false;
+  if (!value.authenticated) return true;
+  return isAdminSession(value.session);
+}
+
+function isRequestsResponse(value: unknown): value is RequestsResponse {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.requests)) return false;
+  return (
+    typeof value.total === "number" &&
+    typeof value.page === "number" &&
+    typeof value.limit === "number" &&
+    typeof value.pages === "number"
+  );
 }
 
 export default function RequestsClient() {
-  const [session, setSession] = useState<any>(null);
+  const router = useRouter();
+  const [session, setSession] = useState<AdminSession | null>(null);
   const [data, setData] = useState<RequestsResponse>({ requests: [], total: 0, page: 1, limit: 20, pages: 0 });
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
+  const pageParam = searchParams?.get("page") ?? "1";
 
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const res = await fetch('/api/me');
+        const res = await fetch("/api/me");
         if (!res.ok) {
-          redirect('/login');
+          router.replace("/login");
           return;
         }
-        const payload = await res.json();
+        const payload: unknown = await res.json().catch(() => null);
+        if (!isMeResponse(payload) || !payload.authenticated) {
+          router.replace("/login");
+          return;
+        }
         setSession(payload.session);
-      } catch (error) {
-        redirect('/login');
+      } catch {
+        router.replace("/login");
       }
     };
-    checkAuth();
-  }, []);
+
+    void checkAuth();
+  }, [router]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!session) return;
-      
+
       setLoading(true);
       // Read page from client-side search params
-      const rawPage = (searchParams?.get("page") as string) ?? "1";
-      let page = parseInt(rawPage, 10);
+      let page = parseInt(pageParam, 10);
       if (Number.isNaN(page) || page < 1) page = 1;
       const limit = 20;
 
@@ -70,8 +80,10 @@ export default function RequestsClient() {
       try {
         const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
         if (res.ok) {
-          const responseData = await res.json();
-          setData(responseData);
+          const responseData: unknown = await res.json().catch(() => null);
+          if (isRequestsResponse(responseData)) {
+            setData(responseData);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch requests:", error);
@@ -80,19 +92,21 @@ export default function RequestsClient() {
       }
     };
 
-    fetchData();
-  }, [session, searchParams?.get("page")]);
+    void fetchData();
+  }, [pageParam, session]);
 
-  const handleUpdateStatus = async (requestId: string, status: string) => {
+  const handleUpdateStatus = async (requestId: string, status: RequestStatus) => {
     // Find index and previous status
-    const idx = data.requests.findIndex(r => r.id === requestId);
+    const idx = data.requests.findIndex((r) => r.id === requestId);
     if (idx === -1) return;
-    const prevStatus = data.requests[idx].status;
+    const currentRequest = data.requests[idx];
+    if (!currentRequest) return;
+    const prevStatus = currentRequest.status;
 
     // Optimistic update
     const updatedRequests = [...data.requests];
-    updatedRequests[idx] = { ...updatedRequests[idx], status };
-    setData({ ...data, requests: updatedRequests });
+    updatedRequests[idx] = { ...currentRequest, status };
+    setData((prev) => ({ ...prev, requests: updatedRequests }));
 
     try {
       const response = await fetch(`/api/requests/${requestId}/status`, {
@@ -105,10 +119,10 @@ export default function RequestsClient() {
 
       if (!response.ok) {
         // Revert status and alert error
-        updatedRequests[idx] = { ...updatedRequests[idx], status: prevStatus };
-        setData({ ...data, requests: updatedRequests });
-        const errorText = await response.text().catch(() => 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
-        alert(errorText || 'เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
+        updatedRequests[idx] = { ...currentRequest, status: prevStatus };
+        setData((prev) => ({ ...prev, requests: updatedRequests }));
+        const errorText = await response.text().catch(() => "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
+        alert(errorText || "เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
         return;
       }
       // Optionally refresh data from backend (optional, UX อาจไม่ต้อง)
@@ -122,10 +136,10 @@ export default function RequestsClient() {
       // }
     } catch (error) {
       // Revert status and alert error
-      updatedRequests[idx] = { ...updatedRequests[idx], status: prevStatus };
-      setData({ ...data, requests: updatedRequests });
-      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
-      console.error('Error updating status:', error);
+      updatedRequests[idx] = { ...currentRequest, status: prevStatus };
+      setData((prev) => ({ ...prev, requests: updatedRequests }));
+      alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
+      console.error("Error updating status:", error);
     }
   };
 
@@ -162,6 +176,14 @@ export default function RequestsClient() {
     return <div className="min-h-screen flex items-center justify-center">
       <div className="text-slate-500">กำลังตรวจสอบสิทธิ์การเข้าใช้...</div>
     </div>;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-slate-500">กำลังโหลดข้อมูลคำร้อง...</div>
+      </div>
+    );
   }
 
   const formatDate = (dateString: string) => {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-async function handleLogout(req: Request) {
+async function handleLogout() {
   try {
     // Build a response that sets a relative Location header and clears the session cookie.
     // Using NextResponse.redirect with a relative path can throw in some runtimes,
@@ -23,11 +23,11 @@ async function handleLogout(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  return handleLogout(req);
+export async function POST() {
+  return handleLogout();
 }
 
 // allow GET requests (useful when hitting the route from a link)
-export async function GET(req: Request) {
-  return handleLogout(req);
+export async function GET() {
+  return handleLogout();
 }

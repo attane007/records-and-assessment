@@ -4,11 +4,12 @@
 
 import { cookies } from "next/headers";
 import { createHmac } from "crypto";
+import type { AdminSession } from "@/lib/types/api";
 
-export type SessionPayload = {
-  sub: string;
-  username: string;
-  exp: number; // unix seconds
+export type SessionPayload = AdminSession;
+
+type CookieStore = {
+  get: (name: string) => { value: string } | undefined;
 };
 
 const enc = new TextEncoder();
@@ -36,6 +37,19 @@ function hmacSHA256(message: string, secret: Uint8Array) {
   return new Uint8Array(buf);
 }
 
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  if (typeof value !== "object" || value === null) return false;
+  return "then" in value && typeof (value as { then?: unknown }).then === "function";
+}
+
+async function getCookieStore(): Promise<CookieStore> {
+  const maybeStore = cookies() as unknown;
+  if (isPromiseLike<CookieStore>(maybeStore)) {
+    return await maybeStore;
+  }
+  return maybeStore as CookieStore;
+}
+
 export async function createSessionToken(payload: SessionPayload): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
   const headerB64 = base64url(JSON.stringify(header));
@@ -55,7 +69,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     if (expected.length !== provided.length) return null;
     // constant-time compare
     let ok = 0;
-    for (let i = 0; i < expected.length; i++) ok |= expected[i] ^ provided[i];
+    for (let i = 0; i < expected.length; i++) ok |= (expected[i] ?? 0) ^ (provided[i] ?? 0);
     if (ok !== 0) return null;
     const payload = JSON.parse(Buffer.from(b64urlToBytes(p)).toString("utf8")) as SessionPayload;
     if (typeof payload.exp !== "number" || Date.now() / 1000 >= payload.exp) return null;
@@ -66,11 +80,8 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
 }
 
 export async function getSessionFromCookies(): Promise<SessionPayload | null> {
-  // In server components and actions, cookies() can be async; await to satisfy types.
-  // Reading only; setting should be done in Route Handlers via NextResponse.cookies.
-  // @ts-ignore: cookies() may be typed sync/async depending on context; await works in both.
-  const jar = await cookies();
-  const token = jar?.get?.("session")?.value as string | undefined;
+  const jar = await getCookieStore();
+  const token = jar.get("session")?.value;
   if (!token) return null;
   return verifySessionToken(token);
 }

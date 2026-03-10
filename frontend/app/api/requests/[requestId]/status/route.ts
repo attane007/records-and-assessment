@@ -6,8 +6,8 @@ async function proxyFetch(path: string, init?: RequestInit) {
   const url = `${backendUrl}${path}`;
   const res = await fetch(url, init);
 
-  const headers: Record<string, string> = {};
-  res.headers.forEach((v, k) => (headers[k] = v));
+  const headers = new Headers();
+  res.headers.forEach((v, k) => headers.set(k, v));
 
   const body = await res.arrayBuffer();
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
@@ -32,7 +32,7 @@ export async function PUT(req: NextRequest) {
     };
 
     return await proxyFetch(forwardPath, init);
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
 }

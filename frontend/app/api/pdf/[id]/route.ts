@@ -2,10 +2,9 @@ import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
-export async function GET(req: NextRequest, context: { params: { id: string } | Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const params = await (context.params as Promise<{ id: string }> | { id: string });
-    const id = params.id;
+    const { id } = await context.params;
     const url = `${backendUrl}/api/pdf/${encodeURIComponent(id)}`;
 
     const res = await fetch(url, {
@@ -18,11 +17,11 @@ export async function GET(req: NextRequest, context: { params: { id: string } | 
     if (!res.ok) return NextResponse.json({ error: 'failed to generate pdf' }, { status: res.status });
 
     const array = await res.arrayBuffer();
-    const headers: Record<string, string> = {};
-    res.headers.forEach((v, k) => (headers[k] = v));
+    const headers = new Headers();
+    res.headers.forEach((v, k) => headers.set(k, v));
 
     return new NextResponse(Buffer.from(array), { status: res.status, headers });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
 }
