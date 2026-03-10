@@ -329,53 +329,66 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	pdf.SetX(pageMargins.Left + 9)
 	pdf.CellFormat(10, 6, "จึงเรียนมาเพื่อโปรดพิจารณา", "", 0, "L", false, 0, "")
 	pdf.Ln(7)
-	pdf.SetX(pageMargins.Left + 120)
-	pdf.CellFormat(10, 6, "ขอแสดงความนับถือ", "", 0, "C", false, 0, "")
-	pdf.Ln(14)
-	pdf.SetX(pageMargins.Left + 120)
+
+	// Requester/Student Signature Block
+	sigBlockW := 80.0
+	sigBlockX := pageMargins.Left + printableW - sigBlockW
+	pdf.SetX(sigBlockX)
+	pdf.CellFormat(sigBlockW, 6, "ขอแสดงความนับถือ", "", 1, "C", false, 0, "")
+	pdf.Ln(10) // Reduced from 14 to move signature up
+
+	// Signature line with "ลงชื่อ"
+	pdf.SetX(sigBlockX)
 	studentSignLineY := pdf.GetY()
-	studentSignX := pdf.GetX()
-	studentSignLabel := "ลงชื่อ ______________________________"
-	studentSignCellW := printableW - (studentSignX - pageMargins.Left)
-	if studentSignCellW < 55 {
-		studentSignCellW = 55
-	}
-	pdf.CellFormat(studentSignCellW, 6, studentSignLabel, "", 0, "L", false, 0, "")
-	pdf.Ln(7)
+	labelStr := "ลงชื่อ "
+	underlineStr := "______________________________"
 	if request.Signatures.Student != nil {
-		underlineStartX := studentSignX + pdf.GetStringWidth("ลงชื่อ ") + 1.5
-		signatureW := 42.0
-		maxSignatureW := studentSignCellW - pdf.GetStringWidth("ลงชื่อ ") - 4
-		if maxSignatureW > 0 && signatureW > maxSignatureW {
-			signatureW = maxSignatureW
-		}
-		drawSignatureImage(pdf, "sig-student", request.Signatures.Student.DataBase64, underlineStartX, studentSignLineY-4.5, signatureW, 11)
+		underlineStr = "                              " // Omit underline if signature exists
 	}
-	pdf.SetX(pageMargins.Left + 120)
-	// use provided name for requester
-	pdf.CellFormat(10, 6, fmt.Sprintf("( %s )", name), "", 0, "C", false, 0, "")
-	pdf.Ln(7)
+	labelW := pdf.GetStringWidth(labelStr)
+	underlineW := pdf.GetStringWidth(underlineStr)
+	totalLineW := labelW + underlineW
+	// Position to center the combined label and underline within sigBlockW
+	lineStartX := sigBlockX + (sigBlockW-totalLineW)/2
+
+	pdf.SetX(lineStartX)
+	pdf.CellFormat(labelW, 6, labelStr, "", 0, "L", false, 0, "")
+	pdf.CellFormat(underlineW, 6, underlineStr, "", 1, "L", false, 0, "")
+
+	if request.Signatures.Student != nil {
+		signatureW := 40.0
+		if signatureW > underlineW {
+			signatureW = underlineW
+		}
+		// Center signature image specifically over the underline part to avoid overlapping "ลงชื่อ"
+		imgX := lineStartX + labelW + (underlineW-signatureW)/2
+		// Move up slightly more by adjusting Y offset from studentSignLineY
+		drawSignatureImage(pdf, "sig-student", request.Signatures.Student.DataBase64, imgX, studentSignLineY-4.0, signatureW, 11)
+	}
+
+	// Name in parentheses - center only over the underline part to match signature
+	pdf.SetX(lineStartX + labelW)
+	pdf.CellFormat(underlineW, 6, fmt.Sprintf("( %s )", name), "", 1, "C", false, 0, "")
+	pdf.Ln(4) // Reduced from 7
 
 	// Draw a thin horizontal line beneath the printed name (signature line)
-	// y position a few mm below the current Y to sit under the text
-	yLine := pdf.GetY() + 4
+	yLine := pdf.GetY() + 2 // Reduced from 4
 	pdf.SetDrawColor(0, 0, 0)
 	pdf.SetLineWidth(0.2)
 	pdf.Line(pageMargins.Left, yLine, pageMargins.Left+printableW, yLine)
-	pdf.Ln(7)
+	pdf.Ln(5) // Reduced from 7
 
-	// Render the registrar comment label in bold using the current font size
+	// Registrar and Director Comments
 	curFontSize, _ := pdf.GetFontSize()
 	pdf.SetFont(thaiFontFamily, "B", curFontSize)
 	pdf.CellFormat(printableW/2, 6, "ความเห็นนายทะเบียน", "", 0, "L", false, 0, "")
-	// pdf.CellFormat(40, 6, "", "1", 0, "L", false, 0, "")
 	pdf.CellFormat(10, 6, "ความเห็นผู้อำนวยการ", "", 0, "L", false, 0, "")
-	// restore previous font style
 	pdf.SetFont(thaiFontFamily, "", curFontSize)
-	pdf.Ln(10)
+	pdf.Ln(7) // Reduced from 10
+
 	pdf.SetX(pageMargins.Left + 9)
 	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
-	yRef := pdf.GetY() + 3.0 // center vertically in the 6mm-high cell
+	yRef := pdf.GetY() + 3.0
 
 	registrarApprove := request.Decisions.Registrar != nil && request.Decisions.Registrar.Decision == models.OfficialDecisionApprove
 	registrarReject := request.Decisions.Registrar != nil && request.Decisions.Registrar.Decision == models.OfficialDecisionReject
@@ -401,23 +414,87 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	drawDecisionCircle(pdf, directorRejectCircleX, yRef, directorReject)
 	pdf.CellFormat(10, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
-	pdf.Ln(15)
+	pdf.Ln(13) // Increased from 10 to avoid overlap with signature
+
+	// Official Signatures (Registrar and Director)
 	officialSignLineY := pdf.GetY()
-	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
-	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
+	colW := printableW / 2
+	officialLabel := "ลงนาม "
+	registrarUnderline := "______________________________"
 	if request.Signatures.Registrar != nil {
-		drawSignatureImage(pdf, "sig-registrar", request.Signatures.Registrar.DataBase64, pageMargins.Left+20, officialSignLineY-5, printableW*0.32, 12)
+		registrarUnderline = "                              "
+	}
+	directorUnderline := "______________________________"
+	if request.Signatures.Director != nil {
+		directorUnderline = "                              "
+	}
+
+	offLabelW := pdf.GetStringWidth(officialLabel)
+	offUnderlineW := pdf.GetStringWidth("______________________________")
+	offTotalW := offLabelW + offUnderlineW
+
+	// Registrar Column
+	regColStartX := pageMargins.Left
+	regSignStartX := regColStartX + (colW-offTotalW)/2
+	pdf.SetX(regSignStartX)
+	pdf.CellFormat(offLabelW, 6, officialLabel, "", 0, "L", false, 0, "")
+	pdf.CellFormat(offUnderlineW, 6, registrarUnderline, "", 0, "L", false, 0, "")
+
+	// Director Column
+	dirColStartX := pageMargins.Left + colW
+	dirSignStartX := dirColStartX + (colW-offTotalW)/2
+	pdf.SetX(dirSignStartX)
+	pdf.CellFormat(offLabelW, 6, officialLabel, "", 0, "L", false, 0, "")
+	pdf.CellFormat(offUnderlineW, 6, directorUnderline, "", 1, "L", false, 0, "")
+
+	if request.Signatures.Registrar != nil {
+		sigW := 40.0
+		if sigW > offUnderlineW {
+			sigW = offUnderlineW
+		}
+		// Center signature relative to the entire "ลงนาม _____" block
+		imgX := regSignStartX + (offTotalW-sigW)/2
+		drawSignatureImage(pdf, "sig-registrar", request.Signatures.Registrar.DataBase64, imgX, officialSignLineY-4.0, sigW, 12)
 	}
 	if request.Signatures.Director != nil {
-		drawSignatureImage(pdf, "sig-director", request.Signatures.Director.DataBase64, pageMargins.Left+(printableW/2)+20, officialSignLineY-5, printableW*0.32, 12)
+		sigW := 40.0
+		if sigW > offUnderlineW {
+			sigW = offUnderlineW
+		}
+		// Center signature relative to the entire "ลงนาม _____" block
+		imgX := dirSignStartX + (offTotalW-sigW)/2
+		drawSignatureImage(pdf, "sig-director", request.Signatures.Director.DataBase64, imgX, officialSignLineY-4.0, sigW, 12)
 	}
-	pdf.Ln(7)
-	// registrarName and directorName are provided by caller (handler did DB lookup and fallback)
-	pdf.CellFormat(printableW/2, 6, fmt.Sprintf("( %s )", registrarName), "", 0, "C", false, 0, "")
-	pdf.CellFormat(printableW/2, 6, fmt.Sprintf("( %s )", directorName), "", 0, "C", false, 0, "")
-	pdf.Ln(7)
-	pdf.CellFormat(printableW/2, 6, "___/___/___", "", 0, "C", false, 0, "")
-	pdf.CellFormat(printableW/2, 6, "___/___/___", "", 0, "C", false, 0, "")
+
+	pdf.Ln(5) // Reduced from 7
+	pdf.CellFormat(colW, 6, fmt.Sprintf("( %s )", registrarName), "", 0, "C", false, 0, "")
+	pdf.CellFormat(colW, 6, fmt.Sprintf("( %s )", directorName), "", 1, "C", false, 0, "")
+	pdf.Ln(5) // Reduced from 7
+
+	// Helper for Thai short date format: Day/ShortMonth/BuddhistYear
+	formatThaiShortDate := func(t time.Time) string {
+		if t.IsZero() {
+			return "___/___/___"
+		}
+		shortMonths := []string{"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."}
+		mIdx := int(t.Month()) - 1
+		if mIdx < 0 || mIdx > 11 {
+			return "___/___/___"
+		}
+		return fmt.Sprintf("%d/%s/%d", t.Day(), shortMonths[mIdx], t.Year()+543)
+	}
+
+	regDateStr := "___/___/___"
+	if request.Decisions.Registrar != nil && !request.Decisions.Registrar.DecidedAt.IsZero() {
+		regDateStr = formatThaiShortDate(request.Decisions.Registrar.DecidedAt)
+	}
+	dirDateStr := "___/___/___"
+	if request.Decisions.Director != nil && !request.Decisions.Director.DecidedAt.IsZero() {
+		dirDateStr = formatThaiShortDate(request.Decisions.Director.DecidedAt)
+	}
+
+	pdf.CellFormat(colW, 6, regDateStr, "", 0, "C", false, 0, "")
+	pdf.CellFormat(colW, 6, dirDateStr, "", 1, "C", false, 0, "")
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {
