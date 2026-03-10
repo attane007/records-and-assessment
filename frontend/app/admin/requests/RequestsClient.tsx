@@ -4,7 +4,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AdminNavbar from "@/components/AdminNavbar";
-import type { AdminSession, MeResponse, RequestStatus, RequestsResponse } from "@/lib/types/api";
+import type {
+  AdminSession,
+  ApiErrorResponse,
+  CreateSignLinkResponse,
+  MeResponse,
+  RequestStatus,
+  RequestsResponse,
+} from "@/lib/types/api";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -33,6 +40,22 @@ function isRequestsResponse(value: unknown): value is RequestsResponse {
     typeof value.page === "number" &&
     typeof value.limit === "number" &&
     typeof value.pages === "number"
+  );
+}
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return isRecord(value) && typeof value.error === "string";
+}
+
+function isCreateSignLinkResponse(value: unknown): value is CreateSignLinkResponse {
+  return (
+    isRecord(value) &&
+    typeof value.sign_url === "string" &&
+    typeof value.token === "string" &&
+    typeof value.role === "string" &&
+    typeof value.channel === "string" &&
+    typeof value.expires_at === "string" &&
+    typeof value.email_sent === "boolean"
   );
 }
 
@@ -170,6 +193,69 @@ export default function RequestsClient() {
       console.error('Error generating PDF:', error);
       alert('เกิดข้อผิดพลาดในการสร้าง PDF');
     }
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCreateSignLink = async (
+    requestId: string,
+    role: "registrar" | "director",
+    channel: "email" | "copy"
+  ) => {
+    const roleLabel = role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ";
+
+    try {
+      const res = await fetch(`/api/requests/${requestId}/sign-links`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role, channel }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+      if (!res.ok || !isCreateSignLinkResponse(data)) {
+        if (isApiErrorResponse(data)) {
+          alert(data.error);
+          return;
+        }
+        alert("ไม่สามารถสร้างลิงก์ลงนามได้");
+        return;
+      }
+
+      if (channel === "email") {
+        if (data.email_sent) {
+          alert(`ส่งอีเมลลิงก์ลงนามให้${roleLabel}เรียบร้อย`);
+        } else {
+          const message = data.warning || "สร้างลิงก์แล้ว แต่ส่งอีเมลไม่สำเร็จ";
+          alert(`${message}\n\nลิงก์: ${data.sign_url}`);
+        }
+        return;
+      }
+
+      const copied = await copyText(data.sign_url);
+      if (copied) {
+        alert(`คัดลอกลิงก์${roleLabel}เรียบร้อย`);
+      } else {
+        window.prompt(`คัดลอกลิงก์${roleLabel}`, data.sign_url);
+      }
+    } catch (error) {
+      console.error("Failed to create sign link:", error);
+      alert("เกิดข้อผิดพลาดระหว่างสร้างลิงก์ลงนาม");
+    }
+  };
+
+  const askDeliveryAndCreate = (requestId: string, role: "registrar" | "director") => {
+    const roleLabel = role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ";
+    const useEmail = window.confirm(
+      `เลือกวิธีส่งลิงก์ให้${roleLabel}\n- กด OK: ส่งอีเมลจากระบบ\n- กด Cancel: สร้างลิงก์และคัดลอกเอง`
+    );
+    void handleCreateSignLink(requestId, role, useEmail ? "email" : "copy");
   };
 
   if (!session) {
@@ -370,6 +456,28 @@ export default function RequestsClient() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                               </svg>
                               ปพ.1
+                            </button>
+
+                            <button
+                              onClick={() => askDeliveryAndCreate(request.id, "registrar")}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700 rounded-md hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors cursor-pointer shadow-sm"
+                              title="สร้างลิงก์ลงนามนายทะเบียน"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m7.156-1.5a4 4 0 015.656 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5" />
+                              </svg>
+                              ลิงก์นายทะเบียน
+                            </button>
+
+                            <button
+                              onClick={() => askDeliveryAndCreate(request.id, "director")}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer shadow-sm"
+                              title="สร้างลิงก์ลงนามผู้อำนวยการ"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m7.156-1.5a4 4 0 015.656 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5" />
+                              </svg>
+                              ลิงก์ผอ.
                             </button>
                             
                             <>

@@ -19,6 +19,20 @@ func GetOfficials() (registrar string, director string) {
 	return
 }
 
+// GetOfficialEmailsFromDB reads optional official email fields.
+func GetOfficialEmailsFromDB(ctx context.Context, coll *mongo.Collection) (registrarEmail string, directorEmail string, err error) {
+	if coll == nil {
+		return "", "", nil
+	}
+	var doc models.Official
+	filter := bson.M{"_id": "school_officials"}
+	err = coll.FindOne(ctx, filter).Decode(&doc)
+	if err != nil {
+		return "", "", nil
+	}
+	return doc.RegistrarEmail, doc.DirectorEmail, nil
+}
+
 // GetOfficialsFromDB tries to load officials from the provided collection.
 // It expects a document like: { _id: "school_officials", registrar_name: "..", director_name: ".." }
 // If the collection is nil or the document is not found, it returns empty strings and a nil error
@@ -39,7 +53,7 @@ func GetOfficialsFromDB(ctx context.Context, coll *mongo.Collection) (registrar 
 
 // SaveOfficialsToDB saves or updates the officials data in the database.
 // It uses upsert to create the document if it doesn't exist or update if it does.
-func SaveOfficialsToDB(ctx context.Context, coll *mongo.Collection, registrarName, directorName string) error {
+func SaveOfficialsToDB(ctx context.Context, coll *mongo.Collection, registrarName, directorName, registrarEmail, directorEmail string) error {
 	if coll == nil {
 		return nil // No collection to save to
 	}
@@ -47,8 +61,10 @@ func SaveOfficialsToDB(ctx context.Context, coll *mongo.Collection, registrarNam
 	filter := bson.M{"_id": "school_officials"}
 	update := bson.M{
 		"$set": bson.M{
-			"registrar_name": registrarName,
-			"director_name":  directorName,
+			"registrar_name":  registrarName,
+			"director_name":   directorName,
+			"registrar_email": registrarEmail,
+			"director_email":  directorEmail,
 		},
 	}
 

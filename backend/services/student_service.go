@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"backend/models"
@@ -26,7 +27,9 @@ func SaveStudent(ctx context.Context, coll *mongo.Collection, payload models.Stu
 		"mother_name":   payload.MotherName,
 		"purpose":       payload.Purpose,
 		"status":        "pending", // Default status is pending
+		"signatures":    payload.Signatures,
 		"created_at":    time.Now(),
+		"updated_at":    time.Now(),
 	})
 	if err != nil {
 		return nil, err
@@ -122,21 +125,22 @@ func GetStats(ctx context.Context, coll *mongo.Collection) (StatsResult, error) 
 
 // RequestRecord represents a student request/application document with metadata
 type RequestRecord struct {
-	ID           interface{} `json:"id" bson:"_id"`
-	Prefix       string      `json:"prefix" bson:"prefix"`
-	Name         string      `json:"name" bson:"name"`
-	DocumentType string      `json:"document_type" bson:"document_type"`
-	IDCard       string      `json:"id_card" bson:"id_card"`
-	StudentID    string      `json:"student_id" bson:"student_id"`
-	DateOfBirth  string      `json:"date_of_birth" bson:"date_of_birth"`
-	Class        string      `json:"class" bson:"class"`
-	Room         string      `json:"room" bson:"room"`
-	AcademicYear string      `json:"academic_year" bson:"academic_year"`
-	FatherName   string      `json:"father_name" bson:"father_name"`
-	MotherName   string      `json:"mother_name" bson:"mother_name"`
-	Purpose      string      `json:"purpose" bson:"purpose"`
-	Status       string      `json:"status" bson:"status"` // pending, completed, cancelled
-	CreatedAt    time.Time   `json:"created_at" bson:"created_at"`
+	ID           interface{}              `json:"id" bson:"_id"`
+	Prefix       string                   `json:"prefix" bson:"prefix"`
+	Name         string                   `json:"name" bson:"name"`
+	DocumentType string                   `json:"document_type" bson:"document_type"`
+	IDCard       string                   `json:"id_card" bson:"id_card"`
+	StudentID    string                   `json:"student_id" bson:"student_id"`
+	DateOfBirth  string                   `json:"date_of_birth" bson:"date_of_birth"`
+	Class        string                   `json:"class" bson:"class"`
+	Room         string                   `json:"room" bson:"room"`
+	AcademicYear string                   `json:"academic_year" bson:"academic_year"`
+	FatherName   string                   `json:"father_name" bson:"father_name"`
+	MotherName   string                   `json:"mother_name" bson:"mother_name"`
+	Purpose      string                   `json:"purpose" bson:"purpose"`
+	Status       string                   `json:"status" bson:"status"` // pending, completed, cancelled
+	Signatures   models.RequestSignatures `json:"signatures" bson:"signatures"`
+	CreatedAt    time.Time                `json:"created_at" bson:"created_at"`
 }
 
 // GetRequests retrieves all student requests with pagination
@@ -195,5 +199,37 @@ func UpdateRequestStatus(ctx context.Context, coll *mongo.Collection, id interfa
 	}
 
 	_, err := coll.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func signaturePathByRole(role models.SignRole) (string, error) {
+	switch role {
+	case models.SignRoleStudent:
+		return "signatures.student", nil
+	case models.SignRoleRegistrar:
+		return "signatures.registrar", nil
+	case models.SignRoleDirector:
+		return "signatures.director", nil
+	default:
+		return "", fmt.Errorf("unsupported sign role: %s", role)
+	}
+}
+
+// UpsertSignature stores one signature block for a given request and role.
+func UpsertSignature(ctx context.Context, coll *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock) error {
+	path, err := signaturePathByRole(role)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{"_id": id}
+	update := bson.M{
+		"$set": bson.M{
+			path:         sig,
+			"updated_at": time.Now(),
+		},
+	}
+
+	_, err = coll.UpdateOne(ctx, filter, update)
 	return err
 }

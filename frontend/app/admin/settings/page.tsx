@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   // Fetch current officials data via Next.js API route which forwards to the Go backend
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   const apiUrl = `${baseUrl}/api/backend/officials`;
-  let officials = { registrar_name: "", director_name: "" };
+  let officials = { registrar_name: "", director_name: "", registrar_email: "", director_email: "" };
 
   try {
     const res = await fetch(apiUrl, { cache: "no-store" });

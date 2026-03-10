@@ -7,12 +7,16 @@ interface SettingsFormProps {
   initialData: {
     registrar_name: string;
     director_name: string;
+    registrar_email: string;
+    director_email: string;
   };
 }
 
 interface FormData {
   registrar_name: string;
   director_name: string;
+  registrar_email: string;
+  director_email: string;
 }
 
 interface PasswordFormData {
@@ -36,7 +40,14 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
         const res = await fetch('/api/backend/officials', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          if (mounted && data) setFormData({ registrar_name: data.registrar_name || '', director_name: data.director_name || '' });
+          if (mounted && data) {
+            setFormData({
+              registrar_name: data.registrar_name || "",
+              director_name: data.director_name || "",
+              registrar_email: data.registrar_email || "",
+              director_email: data.director_email || "",
+            });
+          }
         }
       } catch (e) {
         // ignore — we'll keep initial empty state
@@ -225,6 +236,42 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
         />
         <p className="text-xs text-slate-500 dark:text-slate-400">
           ชื่อนี้จะปรากฏในเอกสาร PDF ที่สร้างโดยระบบ
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="registrar_email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          อีเมลนายทะเบียน
+        </label>
+        <input
+          type="email"
+          id="registrar_email"
+          name="registrar_email"
+          value={formData.registrar_email}
+          onChange={handleInputChange}
+          placeholder="registrar@example.com"
+          className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-colors"
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          ใช้สำหรับส่งลิงก์ลงนามเอกสารโดยตรงจากระบบ
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="director_email" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+          อีเมลผู้อำนวยการ
+        </label>
+        <input
+          type="email"
+          id="director_email"
+          name="director_email"
+          value={formData.director_email}
+          onChange={handleInputChange}
+          placeholder="director@example.com"
+          className="w-full px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-colors"
+        />
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          ใช้สำหรับส่งลิงก์ลงนามเอกสารโดยตรงจากระบบ
         </p>
       </div>
 

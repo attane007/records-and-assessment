@@ -4,7 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { ApiErrorResponse, SubmitRequestBody, ValidationErrorResponse } from "@/lib/types/api";
+import SignatureModal from "@/components/signature/SignatureModal";
+import type {
+  ApiErrorResponse,
+  CreateSignSessionResponse,
+  SubmitRequestBody,
+  SubmitResponse,
+  UpdateSignatureRequestBody,
+  ValidationErrorResponse,
+} from "@/lib/types/api";
 
 // validate Thai national ID (13 digits with checksum)
 function isValidThaiID(s: string) {
@@ -106,6 +114,22 @@ function isApiErrorResponse(data: unknown): data is ApiErrorResponse {
   return isRecord(data) && typeof data.error === "string";
 }
 
+function isSubmitResponse(data: unknown): data is SubmitResponse {
+  return isRecord(data) && typeof data.id === "string" && typeof data.message === "string";
+}
+
+function isCreateSignSessionResponse(data: unknown): data is CreateSignSessionResponse {
+  return (
+    isRecord(data) &&
+    typeof data.session_id === "string" &&
+    typeof data.status === "string" &&
+    typeof data.expires_at === "string" &&
+    typeof data.mobile_url === "string" &&
+    typeof data.request_id === "string" &&
+    typeof data.role === "string"
+  );
+}
+
 function getThaiIdHint(idCard: string): { text: string; tone: HelpTone } {
   if (!idCard) {
     return { text: "ต้องเป็นตัวเลข 13 หลัก", tone: "muted" };
@@ -129,6 +153,8 @@ export default function Home() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isMobilePreviewOpen, setIsMobilePreviewOpen] = useState(false);
+  const [activeRequestId, setActiveRequestId] = useState<string>("");
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
 
   const missingRequiredFields = REQUIRED_FIELDS.filter((field) => form[field].trim() === "");
   const missingRequiredSet = new Set<FormField>(missingRequiredFields);
@@ -148,6 +174,55 @@ export default function Home() {
     setForm({ ...EMPTY_FORM });
     setErrors({});
     setStatus({ kind: "idle" });
+    setActiveRequestId("");
+    setSignatureModalOpen(false);
+  }
+
+  async function submitStudentSignature(payload: UpdateSignatureRequestBody) {
+    if (!activeRequestId) {
+      throw new Error("ไม่พบรหัสคำร้องสำหรับลงนาม");
+    }
+
+    const res = await fetch(`/api/requests/${activeRequestId}/signature/student`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const data: unknown = await res.json().catch(() => null);
+      if (isApiErrorResponse(data)) {
+        throw new Error(data.error);
+      }
+      throw new Error("บันทึกลายเซ็นต์ไม่สำเร็จ");
+    }
+  }
+
+  async function requestStudentQrSession() {
+    if (!activeRequestId) {
+      throw new Error("ไม่พบรหัสคำร้องสำหรับสร้าง QR");
+    }
+
+    const res = await fetch("/api/sign-sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: activeRequestId, role: "student" }),
+    });
+    const data: unknown = await res.json().catch(() => null);
+
+    if (!res.ok || !isCreateSignSessionResponse(data)) {
+      if (isApiErrorResponse(data)) {
+        throw new Error(data.error);
+      }
+      throw new Error("สร้าง QR ไม่สำเร็จ");
+    }
+    return data;
+  }
+
+  function handleSignatureComplete() {
+    setSignatureModalOpen(false);
+    setSubmitted(true);
+    setStatus({ kind: "success", message: "บันทึกข้อมูลและลงนามเรียบร้อย" });
   }
 
   function handleChange(
@@ -234,8 +309,13 @@ export default function Home() {
           setStatus({ kind: "error", message: "unexpected error" });
         }
       } else {
-        setStatus({ kind: "success", message: "บันทึกข้อมูลเรียบร้อย" });
-        setSubmitted(true);
+        if (!isSubmitResponse(data)) {
+          setStatus({ kind: "error", message: "ไม่พบรหัสคำร้องหลังบันทึกข้อมูล" });
+          return;
+        }
+        setActiveRequestId(data.id);
+        setStatus({ kind: "success", message: "บันทึกข้อมูลเรียบร้อย กรุณาลงนามเพื่อยืนยันคำร้อง" });
+        setSignatureModalOpen(true);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown error";
@@ -591,6 +671,13 @@ export default function Home() {
           © {new Date().getFullYear()} Records & Assessment System
         </div>
       </footer>
+
+      <SignatureModal
+        open={signatureModalOpen}
+        submitSignature={submitStudentSignature}
+        requestQrSession={requestStudentQrSession}
+        onComplete={handleSignatureComplete}
+      />
     </div>
   );
 }

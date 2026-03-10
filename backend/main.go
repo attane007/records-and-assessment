@@ -44,6 +44,9 @@ func main() {
 	mongoCollOfficials := client.Database(cfg.DBName).Collection("officials")
 	// use a dedicated collection for admin users
 	mongoCollAdmin := client.Database(cfg.DBName).Collection("admins")
+	// collections for signing flow
+	mongoCollSignLinks := client.Database(cfg.DBName).Collection("sign_links")
+	mongoCollSignSessions := client.Database(cfg.DBName).Collection("sign_sessions")
 
 	// Initialize admin service and create default admin if not exists
 	adminService := services.NewAdminService(mongoCollAdmin)
@@ -71,7 +74,7 @@ func main() {
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection
-	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin)
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }

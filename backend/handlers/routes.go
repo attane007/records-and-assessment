@@ -2,9 +2,14 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"backend/models"
@@ -17,8 +22,108 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+const maxSignatureDataLength = 450000
+
+type signatureUpdatePayload struct {
+	DataBase64 string `json:"data_base64" binding:"required"`
+	Method     string `json:"method" binding:"required,oneof=draw upload"`
+	SignedVia  string `json:"signed_via"`
+}
+
+func decodeAndValidateDataURL(input string) error {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return fmt.Errorf("signature data is required")
+	}
+	if len(trimmed) > maxSignatureDataLength {
+		return fmt.Errorf("signature payload is too large")
+	}
+
+	encoded := trimmed
+	if strings.HasPrefix(trimmed, "data:") {
+		comma := strings.Index(trimmed, ",")
+		if comma < 0 {
+			return fmt.Errorf("invalid data url")
+		}
+		header := strings.ToLower(trimmed[:comma])
+		if !strings.Contains(header, ";base64") {
+			return fmt.Errorf("signature must be base64 encoded")
+		}
+		if !strings.Contains(header, "image/png") && !strings.Contains(header, "image/jpeg") && !strings.Contains(header, "image/webp") {
+			return fmt.Errorf("unsupported signature image format")
+		}
+		encoded = trimmed[comma+1:]
+	}
+
+	if _, err := base64.StdEncoding.DecodeString(encoded); err != nil {
+		if _, rawErr := base64.RawStdEncoding.DecodeString(encoded); rawErr != nil {
+			return fmt.Errorf("invalid base64 data")
+		}
+	}
+	return nil
+}
+
+func toSignatureBlock(payload signatureUpdatePayload) (models.SignatureBlock, error) {
+	if err := decodeAndValidateDataURL(payload.DataBase64); err != nil {
+		return models.SignatureBlock{}, err
+	}
+
+	signedVia := strings.TrimSpace(payload.SignedVia)
+	if signedVia == "" {
+		signedVia = "web"
+	}
+	if signedVia != "web" && signedVia != "mobile" && signedVia != "qr-mobile" {
+		return models.SignatureBlock{}, fmt.Errorf("invalid signed_via")
+	}
+
+	return models.SignatureBlock{
+		DataBase64: payload.DataBase64,
+		Method:     payload.Method,
+		SignedVia:  signedVia,
+		SignedAt:   time.Now(),
+	}, nil
+}
+
+func buildPublicBaseURL(c *gin.Context) string {
+	if configured := strings.TrimSpace(os.Getenv("SIGN_PUBLIC_BASE_URL")); configured != "" {
+		return strings.TrimRight(configured, "/")
+	}
+
+	proto := c.GetHeader("X-Forwarded-Proto")
+	if proto == "" {
+		if c.Request.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+	host := c.GetHeader("X-Forwarded-Host")
+	if host == "" {
+		host = c.Request.Host
+	}
+	if host == "" {
+		host = "localhost:3000"
+	}
+	return fmt.Sprintf("%s://%s", proto, host)
+}
+
+func mapSignLinkError(err error) (int, string) {
+	switch {
+	case errors.Is(err, services.ErrSignLinkNotFound):
+		return http.StatusNotFound, "sign link not found"
+	case errors.Is(err, services.ErrSignLinkExpired):
+		return http.StatusGone, "sign link expired"
+	case errors.Is(err, services.ErrSignLinkUsed):
+		return http.StatusConflict, "sign link already used"
+	case errors.Is(err, services.ErrSignLinkRevoked):
+		return http.StatusForbidden, "sign link revoked"
+	default:
+		return http.StatusInternalServerError, "sign link error"
+	}
+}
+
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -83,6 +188,352 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 		c.JSON(http.StatusOK, stats)
+	})
+
+	// PUT /api/requests/:id/signature/student - submit requester signature
+	r.PUT("/api/requests/:id/signature/student", func(c *gin.Context) {
+		idStr := c.Param("id")
+		objectID, err := primitive.ObjectIDFromHex(idStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request ID"})
+			return
+		}
+
+		var payload signatureUpdatePayload
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature payload"})
+			return
+		}
+
+		sig, err := toSignatureBlock(payload)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := services.UpsertSignature(ctx, mongoColl, objectID, models.SignRoleStudent, sig); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "student signature saved"})
+	})
+
+	// POST /api/requests/:id/sign-links - create official sign link from admin workflow
+	r.POST("/api/requests/:id/sign-links", func(c *gin.Context) {
+		idStr := c.Param("id")
+		objectID, err := primitive.ObjectIDFromHex(idStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request ID"})
+			return
+		}
+
+		var payload struct {
+			Role           string `json:"role" binding:"required,oneof=registrar director"`
+			Channel        string `json:"channel" binding:"required,oneof=email copy"`
+			RecipientEmail string `json:"recipient_email"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sign link payload"})
+			return
+		}
+
+		role := models.SignRole(payload.Role)
+		recipientEmail := strings.TrimSpace(payload.RecipientEmail)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+
+		if payload.Channel == "email" && recipientEmail == "" {
+			registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl)
+			if role == models.SignRoleRegistrar {
+				recipientEmail = strings.TrimSpace(registrarEmail)
+			} else {
+				recipientEmail = strings.TrimSpace(directorEmail)
+			}
+			if recipientEmail == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "recipient email is required for email channel"})
+				return
+			}
+		}
+
+		record, rawToken, err := services.CreateSignLink(ctx, signLinksColl, objectID, role, payload.Channel, recipientEmail, 7)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create sign link"})
+			return
+		}
+
+		signURL := fmt.Sprintf("%s/sign/%s", buildPublicBaseURL(c), rawToken)
+		emailSent := false
+		var warning string
+		if payload.Channel == "email" {
+			err = services.SendOfficialSignLink(ctx, payload.Role, recipientEmail, signURL, objectID.Hex())
+			if err != nil {
+				warning = err.Error()
+			} else {
+				emailSent = true
+				_ = services.TouchSignLinkSent(ctx, signLinksColl, record.ID)
+			}
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":         "sign link created",
+			"sign_url":        signURL,
+			"token":           rawToken,
+			"role":            role,
+			"channel":         payload.Channel,
+			"recipient_email": recipientEmail,
+			"expires_at":      record.ExpiresAt,
+			"email_sent":      emailSent,
+			"warning":         warning,
+		})
+	})
+
+	// GET /api/sign-links/:token - verify token and return signing metadata
+	r.GET("/api/sign-links/:token", func(c *gin.Context) {
+		rawToken := c.Param("token")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		record, err := services.GetSignLinkByRawToken(ctx, signLinksColl, rawToken)
+		if err != nil {
+			status, msg := mapSignLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+
+		validationErr := services.ValidateSignLink(record)
+		active := validationErr == nil
+
+		request, reqErr := services.GetRequestByID(ctx, mongoColl, record.RequestID)
+		if reqErr != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+
+		response := gin.H{
+			"role":       record.Role,
+			"request_id": record.RequestID.Hex(),
+			"expires_at": record.ExpiresAt,
+			"used_at":    record.UsedAt,
+			"revoked":    record.Revoked,
+			"active":     active,
+			"request": gin.H{
+				"id":            request.ID,
+				"prefix":        request.Prefix,
+				"name":          request.Name,
+				"document_type": request.DocumentType,
+				"purpose":       request.Purpose,
+			},
+		}
+		if validationErr != nil {
+			_, msg := mapSignLinkError(validationErr)
+			response["status_message"] = msg
+		}
+
+		c.JSON(http.StatusOK, response)
+	})
+
+	// POST /api/sign-links/:token/sign - submit official signature via tokenized link
+	r.POST("/api/sign-links/:token/sign", func(c *gin.Context) {
+		rawToken := c.Param("token")
+
+		var payload signatureUpdatePayload
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature payload"})
+			return
+		}
+
+		sig, err := toSignatureBlock(payload)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+
+		record, err := services.GetSignLinkByRawToken(ctx, signLinksColl, rawToken)
+		if err != nil {
+			status, msg := mapSignLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+
+		if err := services.ValidateSignLink(record); err != nil {
+			status, msg := mapSignLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+
+		if record.Role != models.SignRoleRegistrar && record.Role != models.SignRoleDirector {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sign link role"})
+			return
+		}
+
+		if err := services.UpsertSignature(ctx, mongoColl, record.RequestID, record.Role, sig); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+			return
+		}
+		if err := services.MarkSignLinkUsed(ctx, signLinksColl, record.ID); err != nil {
+			log.Printf("failed to mark sign link used: %v", err)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "signature saved"})
+	})
+
+	// POST /api/sign-sessions - create a QR handoff session
+	r.POST("/api/sign-sessions", func(c *gin.Context) {
+		var payload struct {
+			RequestID string `json:"request_id"`
+			Role      string `json:"role"`
+			Token     string `json:"token"`
+		}
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid sign session payload"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+		defer cancel()
+
+		var requestID primitive.ObjectID
+		var role models.SignRole
+		var signLinkID *primitive.ObjectID
+
+		if strings.TrimSpace(payload.Token) != "" {
+			record, err := services.GetSignLinkByRawToken(ctx, signLinksColl, payload.Token)
+			if err != nil {
+				status, msg := mapSignLinkError(err)
+				c.JSON(status, gin.H{"error": msg})
+				return
+			}
+			if err := services.ValidateSignLink(record); err != nil {
+				status, msg := mapSignLinkError(err)
+				c.JSON(status, gin.H{"error": msg})
+				return
+			}
+			requestID = record.RequestID
+			role = record.Role
+			signLinkID = &record.ID
+		} else {
+			if strings.TrimSpace(payload.RequestID) == "" || strings.TrimSpace(payload.Role) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "request_id and role are required"})
+				return
+			}
+			objID, err := primitive.ObjectIDFromHex(payload.RequestID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request_id"})
+				return
+			}
+			if payload.Role != string(models.SignRoleStudent) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "direct session creation is allowed for student role only"})
+				return
+			}
+			requestID = objID
+			role = models.SignRoleStudent
+		}
+
+		session, err := services.CreateSignSession(ctx, signSessionsColl, requestID, role, signLinkID, 10*time.Minute)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create sign session"})
+			return
+		}
+
+		mobileURL := fmt.Sprintf("%s/sign/mobile?sessionId=%s", buildPublicBaseURL(c), session.ID)
+		c.JSON(http.StatusOK, gin.H{
+			"session_id": session.ID,
+			"status":     session.Status,
+			"expires_at": session.ExpiresAt,
+			"mobile_url": mobileURL,
+			"request_id": session.RequestID.Hex(),
+			"role":       session.Role,
+		})
+	})
+
+	// GET /api/sign-sessions/:id/status - poll status for desktop QR flow
+	r.GET("/api/sign-sessions/:id/status", func(c *gin.Context) {
+		sessionID := c.Param("id")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		session, err := services.GetSignSessionByID(ctx, signSessionsColl, sessionID)
+		if err != nil {
+			if errors.Is(err, services.ErrSignSessionNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "sign session not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read sign session"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"session_id":   session.ID,
+			"status":       session.Status,
+			"expires_at":   session.ExpiresAt,
+			"completed_at": session.CompletedAt,
+			"request_id":   session.RequestID.Hex(),
+			"role":         session.Role,
+		})
+	})
+
+	// POST /api/sign-sessions/:id/complete - mobile client completes signature for one session
+	r.POST("/api/sign-sessions/:id/complete", func(c *gin.Context) {
+		sessionID := c.Param("id")
+
+		var payload signatureUpdatePayload
+		if err := c.ShouldBindJSON(&payload); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid signature payload"})
+			return
+		}
+
+		sig, err := toSignatureBlock(payload)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		sig.SignedVia = "qr-mobile"
+
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+
+		session, err := services.GetSignSessionByID(ctx, signSessionsColl, sessionID)
+		if err != nil {
+			if errors.Is(err, services.ErrSignSessionNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "sign session not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read sign session"})
+			return
+		}
+
+		if session.Status == "completed" {
+			c.JSON(http.StatusConflict, gin.H{"error": "session already completed"})
+			return
+		}
+		if session.Status == "expired" || time.Now().After(session.ExpiresAt) {
+			c.JSON(http.StatusGone, gin.H{"error": "sign session expired"})
+			return
+		}
+
+		if err := services.UpsertSignature(ctx, mongoColl, session.RequestID, session.Role, sig); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
+			return
+		}
+		if session.SignLinkID != nil {
+			if err := services.MarkSignLinkUsed(ctx, signLinksColl, *session.SignLinkID); err != nil {
+				log.Printf("failed to mark sign link used from session: %v", err)
+			}
+		}
+		if err := services.CompleteSignSession(ctx, signSessionsColl, session.ID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to complete sign session"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "signature saved", "session_id": session.ID})
 	})
 
 	// GET /api/requests - return paginated list of student requests
@@ -202,14 +653,17 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		defer cancel()
 
 		registrarName, directorName, err := services.GetOfficialsFromDB(ctx, officialsColl)
+		registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl)
 		if err != nil || (registrarName == "" && directorName == "") {
 			// Return default values if no data found
 			registrarName, directorName = services.GetOfficials()
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"registrar_name": registrarName,
-			"director_name":  directorName,
+			"registrar_name":  registrarName,
+			"director_name":   directorName,
+			"registrar_email": registrarEmail,
+			"director_email":  directorEmail,
 		})
 	})
 
@@ -229,7 +683,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err := services.SaveOfficialsToDB(ctx, officialsColl, payload.RegistrarName, payload.DirectorName)
+		err := services.SaveOfficialsToDB(ctx, officialsColl, payload.RegistrarName, payload.DirectorName, payload.RegistrarEmail, payload.DirectorEmail)
 		if err != nil {
 			log.Printf("Error saving officials: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save officials data"})

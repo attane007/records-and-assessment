@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,51 @@ import (
 
 	"github.com/jung-kurt/gofpdf"
 )
+
+func decodeSignatureData(raw string) ([]byte, string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, "", fmt.Errorf("empty signature")
+	}
+
+	encoded := trimmed
+	imageType := "PNG"
+	if strings.HasPrefix(trimmed, "data:") {
+		comma := strings.Index(trimmed, ",")
+		if comma < 0 {
+			return nil, "", fmt.Errorf("invalid data url")
+		}
+		header := strings.ToLower(trimmed[:comma])
+		if strings.Contains(header, "image/jpeg") || strings.Contains(header, "image/jpg") {
+			imageType = "JPG"
+		} else if strings.Contains(header, "image/png") {
+			imageType = "PNG"
+		} else {
+			return nil, "", fmt.Errorf("unsupported signature format")
+		}
+		encoded = trimmed[comma+1:]
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		decoded, err = base64.RawStdEncoding.DecodeString(encoded)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	return decoded, imageType, nil
+}
+
+func drawSignatureImage(pdf *gofpdf.Fpdf, alias string, rawData string, x, y, w, h float64) {
+	data, imageType, err := decodeSignatureData(rawData)
+	if err != nil {
+		return
+	}
+
+	opt := gofpdf.ImageOptions{ImageType: imageType, ReadDpi: true}
+	pdf.RegisterImageOptionsReader(alias, opt, bytes.NewReader(data))
+	pdf.ImageOptions(alias, x, y, w, h, false, opt, 0, "")
+}
 
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
@@ -276,8 +322,12 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	pdf.CellFormat(10, 6, "ขอแสดงความนับถือ", "", 0, "C", false, 0, "")
 	pdf.Ln(14)
 	pdf.SetX(pageMargins.Left + 120)
+	studentSignLineY := pdf.GetY()
 	pdf.CellFormat(10, 6, "ลงชื่อ ______________________________", "", 0, "C", false, 0, "")
 	pdf.Ln(7)
+	if request.Signatures.Student != nil {
+		drawSignatureImage(pdf, "sig-student", request.Signatures.Student.DataBase64, pageMargins.Left+138, studentSignLineY-5, 42, 12)
+	}
 	pdf.SetX(pageMargins.Left + 120)
 	// use provided name for requester
 	pdf.CellFormat(10, 6, fmt.Sprintf("( %s )", name), "", 0, "C", false, 0, "")
@@ -325,8 +375,15 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName string) ([]
 	pdf.CellFormat(10, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
 	pdf.Ln(15)
+	officialSignLineY := pdf.GetY()
 	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
 	pdf.CellFormat(printableW/2, 6, "ลงนาม ______________________________", "", 0, "C", false, 0, "")
+	if request.Signatures.Registrar != nil {
+		drawSignatureImage(pdf, "sig-registrar", request.Signatures.Registrar.DataBase64, pageMargins.Left+20, officialSignLineY-5, printableW*0.32, 12)
+	}
+	if request.Signatures.Director != nil {
+		drawSignatureImage(pdf, "sig-director", request.Signatures.Director.DataBase64, pageMargins.Left+(printableW/2)+20, officialSignLineY-5, printableW*0.32, 12)
+	}
 	pdf.Ln(7)
 	// registrarName and directorName are provided by caller (handler did DB lookup and fallback)
 	pdf.CellFormat(printableW/2, 6, fmt.Sprintf("( %s )", registrarName), "", 0, "C", false, 0, "")

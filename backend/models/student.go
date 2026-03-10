@@ -1,5 +1,22 @@
 package models
 
+import "time"
+
+// SignatureBlock stores one signature entry for a role.
+type SignatureBlock struct {
+	DataBase64 string    `json:"data_base64" bson:"data_base64"`
+	Method     string    `json:"method" bson:"method"`         // draw | upload
+	SignedVia  string    `json:"signed_via" bson:"signed_via"` // web | mobile | qr-mobile
+	SignedAt   time.Time `json:"signed_at" bson:"signed_at"`
+}
+
+// RequestSignatures stores signatures for each role in the workflow.
+type RequestSignatures struct {
+	Student   *SignatureBlock `json:"student,omitempty" bson:"student,omitempty"`
+	Registrar *SignatureBlock `json:"registrar,omitempty" bson:"registrar,omitempty"`
+	Director  *SignatureBlock `json:"director,omitempty" bson:"director,omitempty"`
+}
+
 // StudentData represents the payload expected from the frontend for ปพ.1
 type StudentData struct {
 	Name         string `json:"name" bson:"name" binding:"required"`
@@ -17,4 +34,6 @@ type StudentData struct {
 	AcademicYear string `json:"academic_year" bson:"academic_year"`
 	FatherName   string `json:"father_name" bson:"father_name"`
 	MotherName   string `json:"mother_name" bson:"mother_name"`
+
+	Signatures RequestSignatures `json:"signatures" bson:"signatures"`
 }
