@@ -120,7 +120,7 @@ export default function SignatureCapturePanel({
             return;
           }
           if (data.status === "expired") {
-            setQrMessage("QR หมดอายุ กรุณาสร้างใหม่");
+            setQrMessage("QR หมดอายุ กรุณากดแท็บสแกน QR อีกครั้ง");
             setQrSession(null);
             setQrImage("");
           }
@@ -295,6 +295,9 @@ export default function SignatureCapturePanel({
             onClick={() => {
               setMethod(item.id);
               setError("");
+              if (item.id === "qr" && !qrSession && !qrLoading) {
+                void startQrSession();
+              }
             }}
             className={`rounded-xl border px-3 py-2 text-left transition ${
               method === item.id
@@ -361,15 +364,10 @@ export default function SignatureCapturePanel({
 
       {method === "qr" ? (
         <div className="space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
-          {!qrSession ? (
-            <button
-              type="button"
-              onClick={() => void startQrSession()}
-              disabled={qrLoading || !requestQrSession}
-              className="inline-flex items-center rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-700 disabled:opacity-60"
-            >
-              {qrLoading ? "กำลังสร้าง QR..." : "สร้าง QR สำหรับมือถือ"}
-            </button>
+          {!qrSession && qrLoading ? (
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800 dark:border-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-200">
+              กำลังสร้าง QR สำหรับมือถือ...
+            </div>
           ) : null}
 
           {qrImage ? (
