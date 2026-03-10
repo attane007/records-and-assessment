@@ -153,9 +153,9 @@ export default function Home() {
   }, [status]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
       <header className="sticky top-0 z-50 w-full border-b border-slate-200/60 dark:border-slate-700/60 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="px-2 sm:px-3 lg:px-4">
           <div className="flex items-center justify-between h-16">
             {/* Left: Logo */}
             <div className="flex items-center gap-3">
@@ -188,28 +188,28 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="space-y-8">
+      <main className="flex-1 px-2 pt-3 pb-2 sm:px-3 sm:pt-4 sm:pb-3 lg:px-4 lg:pt-5 lg:pb-4">
+        <div className="space-y-3 sm:space-y-4">
           {/* Welcome Section */}
-          <div className="text-center space-y-4">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+          <div className="px-1 py-1 sm:py-2 text-center space-y-2">
+            <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
               ระบบคำร้องขอเอกสาร ปพ.1/ปพ.7
             </h1>
-            <p className="text-md text-slate-600 dark:text-slate-400">
+            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
               กรอกข้อมูลเพื่อขอเอกสารประวัตินักเรียน ปพ.1 หรือ ปพ.7
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] items-start">
+          <div className="grid gap-3 lg:gap-4 xl:gap-5 lg:grid-cols-[1.35fr_0.65fr] items-start">
             {!submitted ? (
-              <Card>
-                <CardHeader
+              <Panel>
+                <PanelHeader
                   title="ส่งข้อมูลนักเรียน"
                   description="กรอกข้อมูลแล้วกดบันทึก ระบบจะส่งไปยัง backend และบันทึกในฐานข้อมูล"
                   iconSrc="/file.svg"
                 />
-                <CardContent>
-                  <form className="w-full grid gap-5" onSubmit={handleSubmit}>
+                <PanelContent>
+                  <form className="w-full grid gap-4 sm:gap-5" onSubmit={handleSubmit}>
                     <div className="grid grid-cols-1">
                       <Field label="ประเภทเอกสาร *">
                         <select name="document_type" value={form.document_type} onChange={handleChange} className={inputCls}>
@@ -362,12 +362,12 @@ export default function Home() {
                       </button>
                     </div>
                   </form>
-                </CardContent>
-              </Card>
+                </PanelContent>
+              </Panel>
             ) : (
-              <Card>
-                <CardHeader title="ส่งข้อมูลเรียบร้อย" description="ระบบได้รับคำร้องของคุณแล้ว" iconSrc="/file.svg" />
-                <CardContent>
+              <Panel>
+                <PanelHeader title="ส่งข้อมูลเรียบร้อย" description="ระบบได้รับคำร้องของคุณแล้ว" iconSrc="/file.svg" />
+                <PanelContent>
                   <div className="py-6 text-center">
                     <div className="text-lg font-semibold text-emerald-700">ขอบคุณ — ข้อมูลถูกส่งเรียบร้อยแล้ว</div>
                     <div className="mt-3 text-sm text-slate-600">ระบบจะทำการประมวลผลและแจ้งผลตามขั้นตอนต่อไป</div>
@@ -385,13 +385,13 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </PanelContent>
+              </Panel>
             )}
 
-            <Card className="sticky top-24">
-              <CardHeader title="ตัวอย่างข้อมูล (Preview)" description="แสดงผลข้อมูลที่กรอกแบบย่อ" iconSrc="/window.svg" />
-              <CardContent>
+            <Panel className="self-start lg:sticky lg:top-20">
+              <PanelHeader title="ตัวอย่างข้อมูล (Preview)" description="แสดงผลข้อมูลที่กรอกแบบย่อ" iconSrc="/window.svg" />
+              <PanelContent>
                 <div className="grid gap-3 text-sm">
                   <KV k="ประเภทเอกสาร" v={form.document_type || "-"} />
                   <KV k="ชื่อ - สกุล" v={(form.prefix || form.name || form.lastname) ? `${form.prefix ? form.prefix + ' ' : ''}${form.name}${form.lastname ? ' ' + form.lastname : ''}` : "-"} />    
@@ -405,21 +405,21 @@ export default function Home() {
                   <KV k="บิดา" v={form.father_name || "-"} />
                   <KV k="มารดา" v={form.mother_name || "-"} />
                 </div>
-              </CardContent>
-            </Card>
+              </PanelContent>
+            </Panel>
           </div>
         </div>
       </main>
 
       {/* Toast container */}
       {status && (
-        <div className={`fixed top-20 right-6 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${statusType === 'success' ? 'bg-emerald-100 border border-emerald-300 text-emerald-800' : 'bg-red-100 border border-red-300 text-red-800'}`}>
+        <div className={`fixed top-[4.5rem] right-2 sm:right-3 lg:right-4 z-50 rounded-lg px-4 py-3 text-sm shadow-lg ${statusType === 'success' ? 'bg-emerald-100 border border-emerald-300 text-emerald-800' : 'bg-red-100 border border-red-300 text-red-800'}`}>
           {status}
         </div>
       )}
 
-      <footer className="border-t border-slate-200/50 dark:border-slate-700/50 mt-8">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-slate-500 dark:text-slate-400">
+      <footer className="border-t border-slate-200/50 dark:border-slate-700/50 mt-2">
+        <div className="px-2 sm:px-3 lg:px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
           © {new Date().getFullYear()} Records & Assessment System
         </div>
       </footer>
@@ -428,32 +428,32 @@ export default function Home() {
 }
 
 // UI primitives
-function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <section className={`group relative rounded-2xl border border-slate-200/50 dark:border-slate-700/50 bg-white dark:bg-slate-900 shadow-sm hover:shadow-lg transition-all duration-300 ${className}`}>
+    <section className={`relative overflow-hidden rounded-xl border border-slate-200/70 dark:border-slate-700/70 bg-white/95 dark:bg-slate-900/95 ${className}`}>
       {children}
     </section>
   );
 }
 
-function CardHeader({ title, description, iconSrc }: { title: string; description?: string; iconSrc?: string }) {
+function PanelHeader({ title, description, iconSrc }: { title: string; description?: string; iconSrc?: string }) {
   return (
-  <div className="border-b border-slate-200/50 dark:border-slate-700/50 p-6 bg-gradient-to-r from-cyan-600 to-indigo-600 dark:from-slate-900 dark:to-slate-900/40">
+    <div className="border-b border-slate-200/50 dark:border-slate-700/50 px-4 py-3 sm:px-5 sm:py-4 bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900/40">
       <div className="flex items-center gap-3">
         {iconSrc ? (
           <div className="w-8 h-8 flex items-center justify-center">
             <Image aria-hidden src={iconSrc} alt="" width={20} height={20} className="filter brightness-0 invert" />
           </div>
         ) : null}
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-base sm:text-lg font-semibold text-white">{title}</h2>
       </div>
       {description ? <p className="mt-1 text-sm text-white/90">{description}</p> : null}
     </div>
   );
 }
 
-function CardContent({ children }: { children: ReactNode }) {
-  return <div className="p-6">{children}</div>;
+function PanelContent({ children }: { children: ReactNode }) {
+  return <div className="p-4 sm:p-5">{children}</div>;
 }
 
 function Field({ label, children, help, error }: { label: string; children: ReactNode; help?: string; error?: string }) {
