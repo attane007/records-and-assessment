@@ -122,6 +122,28 @@ func mapSignLinkError(err error) (int, string) {
 	}
 }
 
+func hasStudentSignature(record *services.RequestRecord) bool {
+	if record == nil || record.Signatures.Student == nil {
+		return false
+	}
+	return strings.TrimSpace(record.Signatures.Student.DataBase64) != ""
+}
+
+func notifyAdminSubmissionAsync(record *services.RequestRecord) {
+	if record == nil {
+		return
+	}
+
+	snapshot := *record
+	go func(req services.RequestRecord) {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		if err := services.SendSubmissionNotificationByRequest(ctx, &req); err != nil {
+			log.Printf("email notification error for id %v: %v", req.ID, err)
+		}
+	}(snapshot)
+}
+
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
 func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
@@ -164,16 +186,6 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		// send email notification asynchronously; do not block the API response
-		go func(p models.StudentData, insertedID interface{}) {
-			// use a background context with timeout to avoid leaking goroutines
-			ctx2, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			if err := services.SendSubmissionNotification(ctx2, p, insertedID); err != nil {
-				log.Printf("email notification error for id %v: %v", insertedID, err)
-			}
-		}(payload, id)
-
 		c.JSON(http.StatusOK, gin.H{"message": "data saved", "id": id})
 	})
 
@@ -214,9 +226,20 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
+		requestBefore, err := services.GetRequestByID(ctx, mongoColl, objectID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+		hadStudentSignature := hasStudentSignature(requestBefore)
+
 		if err := services.UpsertSignature(ctx, mongoColl, objectID, models.SignRoleStudent, sig); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
+		}
+
+		if !hadStudentSignature {
+			notifyAdminSubmissionAsync(requestBefore)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "student signature saved"})
@@ -519,6 +542,17 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
+		var requestBefore *services.RequestRecord
+		hadStudentSignature := false
+		if session.Role == models.SignRoleStudent {
+			requestBefore, err = services.GetRequestByID(ctx, mongoColl, session.RequestID)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+				return
+			}
+			hadStudentSignature = hasStudentSignature(requestBefore)
+		}
+
 		if err := services.UpsertSignature(ctx, mongoColl, session.RequestID, session.Role, sig); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
@@ -531,6 +565,10 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		if err := services.CompleteSignSession(ctx, signSessionsColl, session.ID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to complete sign session"})
 			return
+		}
+
+		if session.Role == models.SignRoleStudent && !hadStudentSignature {
+			notifyAdminSubmissionAsync(requestBefore)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "signature saved", "session_id": session.ID})

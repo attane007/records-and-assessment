@@ -109,6 +109,24 @@ func SendSubmissionNotification(ctx context.Context, payload models.StudentData,
 	return sendRawEmail(ctx, srv, delegate, notifyTo, subject, body)
 }
 
+// SendSubmissionNotificationByRequest sends the same admin notification email
+// but builds content from a persisted request record.
+func SendSubmissionNotificationByRequest(ctx context.Context, request *RequestRecord) error {
+	if request == nil {
+		return fmt.Errorf("request is required")
+	}
+
+	payload := models.StudentData{
+		Prefix:       request.Prefix,
+		Name:         request.Name,
+		DocumentType: request.DocumentType,
+		StudentID:    request.StudentID,
+		Purpose:      request.Purpose,
+	}
+
+	return SendSubmissionNotification(ctx, payload, request.ID)
+}
+
 // SendOfficialSignLink sends a signing URL to one official recipient.
 func SendOfficialSignLink(ctx context.Context, role, toEmail, signURL string, requestID interface{}) error {
 	if strings.TrimSpace(toEmail) == "" {
