@@ -173,6 +173,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	// If image found, draw it centered at top
 	pageW, _ := pdf.GetPageSize()
 	printableW := pageW - pageMargins.Left - pageMargins.Right
+	colW := printableW / 2
 	if imgPath != "" {
 		imgW := 25.0 // mm, adjust to match appearance
 		x := pageMargins.Left + (printableW-imgW)/2
@@ -405,6 +406,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	drawDecisionCircle(pdf, registrarRejectCircleX, yRef, registrarReject)
 	pdf.CellFormat(40, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
+	pdf.SetX(pageMargins.Left + colW + 9) // Align Director's "Should" with Registrar's
 	pdf.CellFormat(18.0, 6, "เห็นควร", "", 0, "L", false, 0, "")
 	directorApproveCircleX := pdf.GetX() + 2.5
 	pdf.CellFormat(5, 6, "", "", 0, "L", false, 0, "")
@@ -415,11 +417,10 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	drawDecisionCircle(pdf, directorRejectCircleX, yRef, directorReject)
 	pdf.CellFormat(10, 6, "ไม่อนุญาต", "", 0, "L", false, 0, "")
 
-	pdf.Ln(13) // Increased from 10 to avoid overlap with signature
+	pdf.Ln(10) // Reduced from 13 to save space
 
 	// Official Signatures (Registrar and Director)
 	officialSignLineY := pdf.GetY()
-	colW := printableW / 2
 	officialLabel := "ลงนาม "
 	registrarUnderline := "______________________________"
 	if request.Signatures.Registrar != nil {
@@ -436,14 +437,14 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 
 	// Registrar Column
 	regColStartX := pageMargins.Left
-	regSignStartX := regColStartX + (colW-offTotalW)/2
+	regSignStartX := regColStartX + 9 // Align with "เห็นควร" label
 	pdf.SetX(regSignStartX)
 	pdf.CellFormat(offLabelW, 6, officialLabel, "", 0, "L", false, 0, "")
 	pdf.CellFormat(offUnderlineW, 6, registrarUnderline, "", 0, "L", false, 0, "")
 
 	// Director Column
 	dirColStartX := pageMargins.Left + colW
-	dirSignStartX := dirColStartX + (colW-offTotalW)/2
+	dirSignStartX := dirColStartX + 9 // Align with "เห็นควร" label
 	pdf.SetX(dirSignStartX)
 	pdf.CellFormat(offLabelW, 6, officialLabel, "", 0, "L", false, 0, "")
 	pdf.CellFormat(offUnderlineW, 6, directorUnderline, "", 1, "L", false, 0, "")
@@ -467,10 +468,10 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 		drawSignatureImage(pdf, "sig-director", request.Signatures.Director.DataBase64, imgX, officialSignLineY-4.0, sigW, 12)
 	}
 
-	pdf.Ln(5) // Reduced from 7
+	pdf.Ln(4) // Reduced from 5 to save space
 	pdf.CellFormat(colW, 6, fmt.Sprintf("( %s )", registrarName), "", 0, "C", false, 0, "")
 	pdf.CellFormat(colW, 6, fmt.Sprintf("( %s )", directorName), "", 1, "C", false, 0, "")
-	pdf.Ln(5) // Reduced from 7
+	pdf.Ln(2) // Reduced from 5 to bring date closer to name
 
 	// Helper for Thai short date format: Day/ShortMonth/BuddhistYear
 	formatThaiShortDate := func(t time.Time) string {
@@ -516,12 +517,12 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 			qrAlias := "qr-verification"
 			pdf.RegisterImageOptionsReader(qrAlias, gofpdf.ImageOptions{ImageType: "PNG"}, bytes.NewReader(qrBytes))
 			// Draw at bottom-left margin
-			pdf.ImageOptions(qrAlias, pageMargins.Left, 270, 15, 15, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
+			pdf.ImageOptions(qrAlias, pageMargins.Left, 267, 15, 15, false, gofpdf.ImageOptions{ImageType: "PNG"}, 0, "")
 
 			// Draw Reference Hash next to QR
 			pdf.SetFont(thaiFontFamily, "", 8)
 			pdf.SetTextColor(100, 100, 100)
-			pdf.SetXY(pageMargins.Left+17, 270+5)
+			pdf.SetXY(pageMargins.Left+17, 267+3) // Moved down from 260+3 to avoid overlap
 			pdf.CellFormat(0, 4, "ตรวจสอบความครบถ้วนของเอกสาร (Digital Verification Reference):", "", 1, "L", false, 0, "")
 			pdf.SetX(pageMargins.Left + 17)
 			pdf.CellFormat(0, 4, refHash, "", 1, "L", false, 0, "")
