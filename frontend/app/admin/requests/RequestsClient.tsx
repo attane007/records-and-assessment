@@ -735,7 +735,7 @@ export default function RequestsClient() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handlePrintPDF(request.id)}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
                                 title="ปรินท์ PDF ของ ปพ.1"
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -746,7 +746,7 @@ export default function RequestsClient() {
 
                               <button
                                 onClick={() => void openLinksModal(request, "registrar")}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700 rounded hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors cursor-pointer shadow-sm"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-cyan-700 dark:text-cyan-200 bg-cyan-50 dark:bg-cyan-900/30 border border-cyan-200 dark:border-cyan-700 rounded hover:bg-cyan-100 dark:hover:bg-cyan-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="สร้างลิงก์ลงนามนายทะเบียน"
                               >
                                 ลิงก์นายทะเบียน
@@ -754,7 +754,7 @@ export default function RequestsClient() {
 
                               <button
                                 onClick={() => void openLinksModal(request, "director")}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer shadow-sm"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-200 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="สร้างลิงก์ลงนามผู้อำนวยการ"
                               >
                                 ลิงก์ผอ.
@@ -764,7 +764,7 @@ export default function RequestsClient() {
                             <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => handleUpdateStatus(request.id, 'completed')}
-                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium text-green-700 dark:text-green-200 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors cursor-pointer shadow-sm"
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-200 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="อนุมัติคำร้อง"
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -774,7 +774,7 @@ export default function RequestsClient() {
                               </button>
                               <button
                                 onClick={() => handleUpdateStatus(request.id, 'cancelled')}
-                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer shadow-sm"
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-200 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer shadow-sm"
                                 title="ยกเลิกคำร้อง"
                               >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -784,7 +784,7 @@ export default function RequestsClient() {
                               </button>
                               <button
                                 onClick={() => void openAuditModal(request)}
-                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
+                                className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer shadow-sm"
                                 title="ดูประวัติการลงนาม (Audit Trail)"
                               >
                                 <History className="w-3 h-3" />
