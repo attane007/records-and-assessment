@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import type {
   CreateSignSessionResponse,
@@ -19,6 +19,8 @@ type SignatureCapturePanelProps = {
   requestQrSession?: () => Promise<CreateSignSessionResponse>;
   onComplete: () => void;
 };
+
+const DRAW_HEIGHT = 220;
 
 export default function SignatureCapturePanel({
   title,
@@ -47,6 +49,7 @@ export default function SignatureCapturePanel({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const drawingRef = useRef(false);
   const hasStrokeRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 768px)");
@@ -73,33 +76,101 @@ export default function SignatureCapturePanel({
     return list;
   }, [allowQr, isMobile]);
 
-  useEffect(() => {
+  const getDevicePixelRatio = useCallback(() => Math.max(window.devicePixelRatio || 1, 1), []);
+
+  const applyStrokeStyle = useCallback((ctx: CanvasRenderingContext2D, ratio: number) => {
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 2 * ratio;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
+  const fillCanvasBackground = useCallback((ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const syncCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    const width = Math.max(320, Math.floor(container.clientWidth));
-    const height = 220;
+    canvas.style.width = "100%";
+    canvas.style.height = `${DRAW_HEIGHT}px`;
 
-    canvas.width = Math.floor(width * ratio);
-    canvas.height = Math.floor(height * ratio);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    const canvasRect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const styles = window.getComputedStyle(container);
+    const paddingX =
+      (Number.parseFloat(styles.paddingLeft) || 0) +
+      (Number.parseFloat(styles.paddingRight) || 0);
+
+    let cssWidth = Math.floor(canvasRect.width);
+    if (cssWidth <= 0) {
+      cssWidth = Math.floor(containerRect.width - paddingX);
+    }
+    if (cssWidth <= 0) {
+      cssWidth = 320;
+    }
+
+    const ratio = getDevicePixelRatio();
+    const targetWidth = Math.max(1, Math.floor(cssWidth * ratio));
+    const targetHeight = Math.max(1, Math.floor(DRAW_HEIGHT * ratio));
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
 
+    fillCanvasBackground(ctx, canvas);
+    applyStrokeStyle(ctx, ratio);
+
+    drawingRef.current = false;
     hasStrokeRef.current = false;
+    activePointerIdRef.current = null;
     setDrawData("");
-  }, []);
+  }, [applyStrokeStyle, fillCanvasBackground, getDevicePixelRatio]);
+
+  useEffect(() => {
+    if (method !== "draw") return;
+
+    let frameId = 0;
+    const scheduleSync = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        syncCanvas();
+      });
+    };
+
+    scheduleSync();
+
+    const container = containerRef.current;
+    const onResize = () => scheduleSync();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+
+    let observer: ResizeObserver | null = null;
+    if (container && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => scheduleSync());
+      observer.observe(container);
+    }
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      observer?.disconnect();
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, [method, syncCanvas]);
 
   useEffect(() => {
     if (!qrSession?.session_id) return;
@@ -144,7 +215,17 @@ export default function SignatureCapturePanel({
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
+
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    return {
+      x: Math.min(Math.max(x, 0), canvas.width),
+      y: Math.min(Math.max(y, 0), canvas.height),
+    };
   };
 
   const exportDrawData = () => {
@@ -159,19 +240,32 @@ export default function SignatureCapturePanel({
   const startDraw = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (!event.isPrimary) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (activePointerIdRef.current !== null && activePointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
     drawingRef.current = true;
-    canvas.setPointerCapture(event.pointerId);
+    activePointerIdRef.current = event.pointerId;
+    try {
+      canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Some browsers may reject pointer capture for specific pointer states.
+    }
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      drawingRef.current = false;
+      activePointerIdRef.current = null;
+      return;
+    }
     const point = getPoint(event);
     ctx.beginPath();
     ctx.moveTo(point.x, point.y);
   };
 
   const drawMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return;
+    if (!drawingRef.current || activePointerIdRef.current !== event.pointerId) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     event.preventDefault();
@@ -187,13 +281,26 @@ export default function SignatureCapturePanel({
   const endDraw = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!drawingRef.current) return;
+    if (activePointerIdRef.current !== null && activePointerIdRef.current !== event.pointerId) return;
+
     event.preventDefault();
-    drawingRef.current = false;
-    if (canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
+    const pointerId = activePointerIdRef.current ?? event.pointerId;
+
+    if (drawingRef.current) {
+      drawingRef.current = false;
+      const ctx = canvas.getContext("2d");
+      ctx?.closePath();
+      exportDrawData();
     }
-    exportDrawData();
+
+    activePointerIdRef.current = null;
+    try {
+      if (canvas.hasPointerCapture(pointerId)) {
+        canvas.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // Ignore release errors when capture was already dropped by the browser.
+    }
   };
 
   const clearDraw = () => {
@@ -202,10 +309,21 @@ export default function SignatureCapturePanel({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const width = parseFloat(canvas.style.width || "0");
-    const height = parseFloat(canvas.style.height || "0");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, width, height);
+    if (activePointerIdRef.current !== null) {
+      try {
+        if (canvas.hasPointerCapture(activePointerIdRef.current)) {
+          canvas.releasePointerCapture(activePointerIdRef.current);
+        }
+      } catch {
+        // Ignore release errors when capture is no longer valid.
+      }
+    }
+
+    fillCanvasBackground(ctx, canvas);
+    applyStrokeStyle(ctx, getDevicePixelRatio());
+
+    drawingRef.current = false;
+    activePointerIdRef.current = null;
     hasStrokeRef.current = false;
     setDrawData("");
   };
