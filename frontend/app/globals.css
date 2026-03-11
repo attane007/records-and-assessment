@@ -26,3 +26,7 @@ body {
 
 /* Only style plain anchors (without classes) so utility classes like .text-white are not overridden */
 a:not([class]) { color: var(--brand); }
+
+.text-xs{
+  font-size: 0.9rem;
+}

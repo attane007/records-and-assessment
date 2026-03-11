@@ -244,7 +244,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	pdf.CellFormat(printableW, 6, "เรียน   ผู้อำนวยการโรงเรียนโพนงามพิทยานุกูล", "", 1, "L", false, 0, "")
 	pdf.Ln(6)
 
-	pdf.SetY(pageMargins.Top + 90)
+	pdf.SetY(pageMargins.Top + 88)
 	pdf.SetX(pageMargins.Left + 9)
 	// Split into two cells so filling name and ID won't shift each other
 	leftWidth := printableW * 0.45
@@ -273,7 +273,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	pdf.CellFormat(labelClassW, 6, "ชั้น: _______", "", 0, "L", false, 0, "")
 	pdf.CellFormat(valueClassW, 6, classVal, "", 1, "L", false, 0, "")
 
-	pdf.SetY(pageMargins.Top + 100)
+	pdf.SetY(pageMargins.Top + 98)
 	pdf.SetX(pageMargins.Left)
 	pdf.CellFormat(15, 6, "รหัสนักเรียน:______________", "", 0, "L", false, 0, "")
 	pdf.CellFormat(30, 6, request.StudentID, "", 0, "C", false, 0, "")
@@ -296,24 +296,24 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	pdf.CellFormat(24, 6, monthStr, "", 0, "C", false, 0, "")
 	pdf.CellFormat(6, 6, "พ.ศ.: ________", "", 0, "L", false, 0, "")
 	pdf.CellFormat(20, 6, fmt.Sprintf("%d", birthYear), "", 1, "C", false, 0, "")
-	pdf.Ln(5)
+	pdf.Ln(3)
 
 	pdf.CellFormat(15, 6, "บิดาชื่อ: ___________________________________________", "", 0, "L", false, 0, "")
 	pdf.CellFormat(72, 6, request.FatherName, "", 0, "C", false, 0, "")
 	pdf.CellFormat(15, 6, "มารดาชื่อ: ________________________________________", "", 0, "L", false, 0, "")
 	pdf.CellFormat(72, 6, request.MotherName, "", 0, "C", false, 0, "")
-	pdf.Ln(10)
+	pdf.Ln(7)
 
 	if docType == "ปพ7" || strings.Contains(request.DocumentType, "ปพ.7") || strings.Contains(request.DocumentType, "ปพ.๗") {
 		pdf.CellFormat(printableW, 6, "มีความประสงค์จะขอใบรับรองผลการศึกษา(ปพ.7) จำนวน 1 ฉบับ", "", 0, "L", false, 0, "")
 	} else {
 		pdf.CellFormat(printableW, 6, "มีความประสงค์จะขอใบระเบียนแสดงผลการเรียน(รบ.1/ปพ.1) จำนวน 1 ฉบับ", "", 0, "L", false, 0, "")
 	}
-	pdf.Ln(10)
+	pdf.Ln(8)
 
 	pdf.CellFormat(10, 6, "เพื่อ: _______________________________________________________________________________________________", "", 0, "L", false, 0, "")
 	pdf.CellFormat(160, 6, request.Purpose, "", 0, "L", false, 0, "")
-	pdf.Ln(10)
+	pdf.Ln(8)
 
 	pdf.SetX(pageMargins.Left + 9)
 	pdf.CellFormat(10, 6, "ทั้งนี้  ข้าพเจ้าได้แนบเอกสารหลักฐานต่างๆ มาด้วยแล้ว", "", 0, "L", false, 0, "")

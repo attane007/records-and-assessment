@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CreateSignSessionResponse, UpdateSignatureRequestBody } from "@/lib/types/api";
 import SignatureCapturePanel from "@/components/signature/SignatureCapturePanel";
@@ -18,13 +17,7 @@ export default function SignatureModal({
   requestQrSession,
   onComplete,
 }: SignatureModalProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted || !open || typeof document === "undefined") return null;
+  if (!open || typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60 p-4">

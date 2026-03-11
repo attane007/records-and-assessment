@@ -420,7 +420,7 @@ export default function RequestsClient() {
       if (!res.ok) throw new Error("ไม่สามารถเรียกดูประวัติได้");
       const data = await res.json();
       setAuditLogs(data.logs || []);
-    } catch (err) {
+    } catch {
       setAuditError("เกิดข้อผิดพลาดในการโหลดข้อมูลประวัติ");
     } finally {
       setAuditLoading(false);
@@ -446,20 +446,6 @@ export default function RequestsClient() {
       </div>
     );
   }
-
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('th-TH', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateString;
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
