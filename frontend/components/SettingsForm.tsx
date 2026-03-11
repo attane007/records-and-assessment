@@ -28,7 +28,7 @@ interface PasswordFormData {
 const inputClass =
   "w-full px-4 py-2.5 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all shadow-sm";
 
-const labelClass = "block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 tracking-tight";
+const labelClass = "block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 uppercase";
 
 export default function SettingsForm({ initialData }: SettingsFormProps) {
   const router = useRouter();

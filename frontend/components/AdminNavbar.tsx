@@ -21,7 +21,7 @@ export default function AdminNavbar({ session, currentPage }: AdminNavbarProps) 
               </svg>
             </div>
             <div className="hidden sm:block">
-              <div className="text-lg font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent leading-tight">
+              <div className="text-lg font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent leading-normal pb-1">
                 ระบบ ปพ.1
               </div>
               <div className="text-[10px] text-slate-500 dark:text-slate-400 -mt-0.5">Records &amp; Assessment System</div>

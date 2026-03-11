@@ -32,7 +32,7 @@ export default async function SettingsPage() {
         <div className="space-y-6">
           {/* Header */}
           <div className="text-center space-y-1 max-w-2xl mx-auto">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 dark:from-slate-100 dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 dark:from-slate-100 dark:via-slate-200 dark:to-slate-400 bg-clip-text text-transparent leading-normal py-1">
               ชื่อนายทะเบียนและผู้อำนวยการ
             </h1>
             <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">

@@ -14,17 +14,17 @@ export default async function AdminPage() {
   try {
     const res = await fetch(`${backendURL}/api/stats`, { cache: "no-store" });
     if (res.ok) stats = await res.json();
-  } catch {}
+  } catch { }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
       <AdminNavbar session={session} currentPage="dashboard" />
-      
+
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-8">
           {/* Welcome Section */}
           <div className="text-center space-y-4">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent leading-relaxed py-1">
               แผงควบคุมผู้ดูแลระบบ
             </h1>
             <p className="text-lg text-slate-600 dark:text-slate-400">
@@ -196,7 +196,7 @@ export default async function AdminPage() {
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-slate-900 dark:text-slate-100">{y.count}</span>
                               <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-20">
-                                <div 
+                                <div
                                   className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full transition-all duration-500"
                                   style={{ width: `${Math.min(100, (y.count / Math.max(...stats.by_year.map(x => x.count))) * 100)}%` }}
                                 ></div>
@@ -277,7 +277,7 @@ export default async function AdminPage() {
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-slate-900 dark:text-slate-100">{m.count}</span>
                               <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden max-w-16">
-                                <div 
+                                <div
                                   className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
                                   style={{ width: `${Math.min(100, (m.count / Math.max(...stats.by_month.map(x => x.count))) * 100)}%` }}
                                 ></div>
