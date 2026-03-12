@@ -8,6 +8,7 @@ import type {
   AdminSession,
   ApiErrorResponse,
   CreateSignLinkResponse,
+  FormLinkCurrentResponse,
   MeResponse,
   OfficialsPayload,
   RequestRecord,
@@ -79,6 +80,14 @@ function isOfficialsPayload(value: unknown): value is OfficialsPayload {
   );
 }
 
+function isFormLinkCurrentResponse(value: unknown): value is FormLinkCurrentResponse {
+  return (
+    isRecord(value) &&
+    typeof value.form_url === "string" &&
+    typeof value.token === "string"
+  );
+}
+
 type OfficialRole = "registrar" | "director";
 
 type AuditLog = {
@@ -98,6 +107,7 @@ export default function RequestsClient() {
   const [data, setData] = useState<RequestsResponse>({ requests: [], total: 0, page: 1, limit: 20, pages: 0 });
   const [loading, setLoading] = useState(true);
   const [officialEmails, setOfficialEmails] = useState<{ registrar: string; director: string }>({ registrar: "", director: "" });
+  const [publicFormUrl, setPublicFormUrl] = useState("");
   const [linksModalOpen, setLinksModalOpen] = useState(false);
   const [linksModalLoading, setLinksModalLoading] = useState(false);
   const [linksModalError, setLinksModalError] = useState("");
@@ -189,7 +199,21 @@ export default function RequestsClient() {
       }
     };
 
+    const loadPublicFormLink = async () => {
+      try {
+        const res = await fetch("/api/form-links/current", { cache: "no-store" });
+        const payload: unknown = await res.json().catch(() => null);
+        if (!active || !res.ok || !isFormLinkCurrentResponse(payload)) {
+          return;
+        }
+        setPublicFormUrl(payload.form_url);
+      } catch {
+        // keep empty form URL
+      }
+    };
+
     void loadOfficialEmails();
+    void loadPublicFormLink();
     return () => {
       active = false;
     };
@@ -449,7 +473,7 @@ export default function RequestsClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
-      <AdminNavbar session={session} currentPage="requests" />
+      <AdminNavbar session={session} currentPage="requests" publicFormUrl={publicFormUrl} />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-6">

@@ -1,8 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/session";
 import AdminNavbar from "@/components/AdminNavbar";
+import type { FormLinkCurrentResponse } from "@/lib/types/api";
 import "server-only";
+
+function isFormLinkCurrentResponse(value: unknown): value is FormLinkCurrentResponse {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    "form_url" in value &&
+    typeof (value as { form_url?: unknown }).form_url === "string" &&
+    "token" in value &&
+    typeof (value as { token?: unknown }).token === "string"
+  );
+}
 
 export default async function AdminPage() {
   const session = await getSessionFromCookies();
@@ -22,9 +34,30 @@ export default async function AdminPage() {
     if (res.ok) stats = await res.json();
   } catch { }
 
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
+  const proto = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
+  const baseUrl = `${proto}://${host}`;
+  let publicFormUrl = "";
+
+  try {
+    const res = await fetch(`${baseUrl}/api/form-links/current`, {
+      cache: "no-store",
+      headers: {
+        cookie: (await cookies()).toString(),
+      },
+    });
+    const payload: unknown = await res.json().catch(() => null);
+    if (res.ok && isFormLinkCurrentResponse(payload)) {
+      publicFormUrl = payload.form_url;
+    }
+  } catch {
+    publicFormUrl = "";
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
-      <AdminNavbar session={session} currentPage="dashboard" />
+      <AdminNavbar session={session} currentPage="dashboard" publicFormUrl={publicFormUrl} />
 
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-8">

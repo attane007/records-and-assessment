@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -47,6 +48,8 @@ func main() {
 	// collections for signing flow
 	mongoCollSignLinks := client.Database(cfg.DBName).Collection("sign_links")
 	mongoCollSignSessions := client.Database(cfg.DBName).Collection("sign_sessions")
+	// collection for reusable public form links
+	mongoCollFormLinks := client.Database(cfg.DBName).Collection("form_links")
 	// collection for audit logs
 	mongoCollAudit := client.Database(cfg.DBName).Collection("audit_logs")
 
@@ -63,6 +66,20 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	_, indexErr := mongoCollFormLinks.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "account_id", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+		{
+			Keys:    bson.D{{Key: "token_hash", Value: 1}},
+			Options: options.Index().SetUnique(true),
+		},
+	})
+	if indexErr != nil {
+		log.Printf("Warning: failed to ensure form_links indexes: %v", indexErr)
+	}
+
 	if err := adminService.InitializeDefaultAdmin(ctx, defaultUsername, defaultPassword); err != nil {
 		log.Printf("Warning: failed to initialize default admin: %v", err)
 	}
@@ -76,7 +93,7 @@ func main() {
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection
-	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions, mongoCollAudit)
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions, mongoCollFormLinks, mongoCollAudit)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }

@@ -45,6 +45,21 @@ type signSessionCompletePayload struct {
 	Decision   string `json:"decision"`
 }
 
+type publicSubmitPayload struct {
+	Name         string `json:"name" binding:"required"`
+	Prefix       string `json:"prefix" binding:"required"`
+	DocumentType string `json:"document_type" binding:"required"`
+	IDCard       string `json:"id_card" binding:"required,idcard"`
+	StudentID    string `json:"student_id"`
+	DateOfBirth  string `json:"date_of_birth" binding:"required"`
+	Purpose      string `json:"purpose" binding:"required"`
+	Class        string `json:"class"`
+	Room         string `json:"room"`
+	AcademicYear string `json:"academic_year"`
+	FatherName   string `json:"father_name"`
+	MotherName   string `json:"mother_name"`
+}
+
 func decodeAndValidateDataURL(input string) error {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -145,6 +160,17 @@ func mapSignLinkError(err error) (int, string) {
 	}
 }
 
+func mapFormLinkError(err error) (int, string) {
+	switch {
+	case errors.Is(err, services.ErrFormLinkNotFound):
+		return http.StatusNotFound, "form link not found"
+	case errors.Is(err, services.ErrFormLinkRevoked):
+		return http.StatusForbidden, "form link revoked"
+	default:
+		return http.StatusInternalServerError, "form link error"
+	}
+}
+
 func hasStudentSignature(record *services.RequestRecord) bool {
 	if record == nil || record.Signatures.Student == nil {
 		return false
@@ -190,7 +216,7 @@ func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksCol
 }
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection, auditColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection, formLinksColl *mongo.Collection, auditColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -214,9 +240,73 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	}
 	requireAuth := RequireBearerAuth(authVerifier)
 
-	// POST /api/submit - accepts student data from the frontend and saves to MongoDB
+	r.GET("/api/form-links/current", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		record, rawToken, err := services.GetOrCreateActiveFormLink(ctx, formLinksColl, accountID)
+		if err != nil {
+			status, msg := mapFormLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"token":      rawToken,
+			"revoked":    record.Revoked,
+			"created_at": record.CreatedAt,
+			"updated_at": record.UpdatedAt,
+			"form_url":   fmt.Sprintf("%s/form/%s", buildPublicBaseURL(c), rawToken),
+		})
+	})
+
+	r.POST("/api/form-links/rotate", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		record, rawToken, err := services.RotateFormLink(ctx, formLinksColl, accountID)
+		if err != nil {
+			status, msg := mapFormLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":    "form link rotated",
+			"token":      rawToken,
+			"revoked":    record.Revoked,
+			"created_at": record.CreatedAt,
+			"updated_at": record.UpdatedAt,
+			"form_url":   fmt.Sprintf("%s/form/%s", buildPublicBaseURL(c), rawToken),
+		})
+	})
+
+	// POST /api/submit - deprecated (legacy account_id based flow)
 	r.POST("/api/submit", func(c *gin.Context) {
-		var payload models.StudentData
+		c.JSON(http.StatusGone, gin.H{"error": "endpoint deprecated, use /api/form-links/:token/submit"})
+	})
+
+	// POST /api/form-links/:token/submit - public student request submit through opaque token
+	r.POST("/api/form-links/:token/submit", func(c *gin.Context) {
+		rawToken := strings.TrimSpace(c.Param("token"))
+		if rawToken == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing form token"})
+			return
+		}
+
+		var payload publicSubmitPayload
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			// try to translate validation errors into readable messages
 			if errs, ok := err.(validator.ValidationErrors); ok {
@@ -231,15 +321,37 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if strings.TrimSpace(payload.AccountID) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "account_id is required"})
+		formLink, err := services.GetFormLinkByRawToken(ctx, formLinksColl, rawToken)
+		if err != nil {
+			status, msg := mapFormLinkError(err)
+			c.JSON(status, gin.H{"error": msg})
 			return
 		}
 
-		id, err := services.SaveStudent(ctx, mongoColl, payload)
+		studentPayload := models.StudentData{
+			Name:         payload.Name,
+			Prefix:       payload.Prefix,
+			DocumentType: payload.DocumentType,
+			IDCard:       payload.IDCard,
+			StudentID:    payload.StudentID,
+			DateOfBirth:  payload.DateOfBirth,
+			Purpose:      payload.Purpose,
+			AccountID:    formLink.AccountID,
+			Class:        payload.Class,
+			Room:         payload.Room,
+			AcademicYear: payload.AcademicYear,
+			FatherName:   payload.FatherName,
+			MotherName:   payload.MotherName,
+		}
+
+		id, err := services.SaveStudent(ctx, mongoColl, studentPayload)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save data"})
 			return
+		}
+
+		if err := services.TouchFormLinkUsed(ctx, formLinksColl, formLink.ID); err != nil {
+			log.Printf("failed to update form link last used timestamp: %v", err)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "data saved", "id": id})

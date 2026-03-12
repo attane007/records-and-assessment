@@ -48,6 +48,15 @@ export type SubmitResponse = {
   id: string;
 };
 
+export type FormLinkCurrentResponse = {
+  token: string;
+  form_url: string;
+  revoked: boolean;
+  created_at: string;
+  updated_at: string;
+  message?: string;
+};
+
 export type SignatureMethod = "draw" | "upload";
 export type SignedVia = "web" | "mobile" | "qr-mobile";
 export type SignRole = "student" | "registrar" | "director";

@@ -3,7 +3,18 @@ import { cookies, headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/session";
 import AdminNavbar from "@/components/AdminNavbar";
 import SettingsForm from "@/components/SettingsForm";
+import type { FormLinkCurrentResponse } from "@/lib/types/api";
 import "server-only";
+
+function isFormLinkCurrentResponse(value: unknown): value is FormLinkCurrentResponse {
+  if (typeof value !== "object" || value === null) return false;
+  return (
+    "form_url" in value &&
+    typeof (value as { form_url?: unknown }).form_url === "string" &&
+    "token" in value &&
+    typeof (value as { token?: unknown }).token === "string"
+  );
+}
 
 export default async function SettingsPage() {
   const session = await getSessionFromCookies();
@@ -16,26 +27,43 @@ export default async function SettingsPage() {
   const baseUrl = `${proto}://${host}`;
   const apiUrl = `${baseUrl}/api/backend/officials`;
   let officials = { registrar_name: "", director_name: "", registrar_email: "", director_email: "" };
+  let publicFormUrl = "";
 
   try {
-    const res = await fetch(apiUrl, {
-      cache: "no-store",
-      headers: {
-        cookie: (await cookies()).toString()
-      }
-    });
-    if (res.ok) {
-      officials = await res.json();
+    const cookieHeader = (await cookies()).toString();
+
+    const [officialsRes, formLinkRes] = await Promise.all([
+      fetch(apiUrl, {
+        cache: "no-store",
+        headers: {
+          cookie: cookieHeader,
+        },
+      }),
+      fetch(`${baseUrl}/api/form-links/current`, {
+        cache: "no-store",
+        headers: {
+          cookie: cookieHeader,
+        },
+      }),
+    ]);
+
+    if (officialsRes.ok) {
+      officials = await officialsRes.json();
     } else {
-      console.error('Failed to fetch officials: response status', res.status);
+      console.error("Failed to fetch officials: response status", officialsRes.status);
+    }
+
+    const formLinkPayload: unknown = await formLinkRes.json().catch(() => null);
+    if (formLinkRes.ok && isFormLinkCurrentResponse(formLinkPayload)) {
+      publicFormUrl = formLinkPayload.form_url;
     }
   } catch (error) {
-    console.error("Failed to fetch officials:", error);
+    console.error("Failed to fetch settings context:", error);
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
-      <AdminNavbar session={session} currentPage="settings" />
+      <AdminNavbar session={session} currentPage="settings" publicFormUrl={publicFormUrl} />
 
       <main className="max-w-6xl mx-auto px-6 py-8 md:py-10">
         <div className="space-y-6">

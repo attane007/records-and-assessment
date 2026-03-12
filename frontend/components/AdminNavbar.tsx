@@ -6,9 +6,10 @@ interface AdminNavbarProps {
     accountId?: string;
   };
   currentPage: 'dashboard' | 'requests' | 'settings';
+  publicFormUrl?: string;
 }
 
-export default function AdminNavbar({ session, currentPage }: AdminNavbarProps) {
+export default function AdminNavbar({ session, currentPage, publicFormUrl }: AdminNavbarProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -81,9 +82,9 @@ export default function AdminNavbar({ session, currentPage }: AdminNavbarProps) 
           <div className="flex-1 flex items-center justify-end gap-2 sm:gap-4">
             {/* Quick Actions Group */}
             <div className="hidden md:flex items-center gap-1.5 p-1 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
-              {session.accountId && (
+              {publicFormUrl && (
                 <Link
-                  href={`/${session.accountId}`}
+                  href={publicFormUrl}
                   target="_blank"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/40 transition-colors"
                   title="Live Public Form"

@@ -48,6 +48,7 @@
   - `students` - ข้อมูลคำร้องนักเรียน/นักศึกษา
   - `officials` - ข้อมูลเจ้าหน้าที่
   - `admins` - ข้อมูลผู้ดูแลระบบ
+  - `form_links` - ลิงก์ฟอร์มสาธารณะ (token แบบ opaque ต่อ account)
 
 ## 🚀 การติดตั้งและเรียกใช้งาน
 
@@ -154,27 +155,31 @@ records-and-assessment/
 
 ### Public Endpoints
 ```
-POST /api/submit          # ยื่นคำร้องขอเอกสาร
-GET  /api/requests/:id    # ตรวจสอบสถานะคำร้อง
-GET  /api/pdf/:id         # ดาวน์โหลด PDF
+POST /api/form-links/:token/submit   # ยื่นคำร้องผ่านลิงก์ token
+GET  /api/requests/:id               # ตรวจสอบสถานะคำร้อง
+GET  /api/pdf/:id                    # ดาวน์โหลด PDF
 ```
+
+> หมายเหตุ: `POST /api/submit` ถูกยกเลิกแล้ว (deprecated).
 
 ### Admin Endpoints
 ```
 POST /api/login                           # เข้าสู่ระบบ
 POST /api/logout                          # ออกจากระบบ
-GET  /api/me                             # ข้อมูลผู้ใช้ปัจจุบัน
-GET  /api/requests                       # รายการคำร้องทั้งหมด
-PUT  /api/requests/:id/status            # อัปเดตสถานะคำร้อง
-GET  /api/backend/officials              # รายการเจ้าหน้าที่
-POST /api/admin/change-password          # เปลี่ยนรหัสผ่าน
+GET  /api/me                              # ข้อมูลผู้ใช้ปัจจุบัน
+GET  /api/requests                        # รายการคำร้องทั้งหมด
+PUT  /api/requests/:id/status             # อัปเดตสถานะคำร้อง
+GET  /api/backend/officials               # รายการเจ้าหน้าที่
+POST /api/admin/change-password           # เปลี่ยนรหัสผ่าน
+GET  /api/form-links/current              # ดึงลิงก์ฟอร์มสาธารณะปัจจุบัน
+POST /api/form-links/rotate               # หมุน token ลิงก์ฟอร์มสาธารณะ
 ```
 
 ## 🎨 การใช้งาน
 
 ### สำหรับนักเรียน/นักศึกษา
 
-1. **ยื่นคำร้อง**: เข้าไปที่หน้าแรก กรอกข้อมูลและยื่นคำร้อง
+1. **ยื่นคำร้อง**: เปิดผ่านลิงก์ฟอร์มสาธารณะรูปแบบ `/form/<token>` แล้วกรอกข้อมูล
 2. **ตรวจสอบสถานะ**: ใช้หมายเลขคำร้องในการตรวจสอบสถานะ
 3. **ดาวน์โหลด**: เมื่อเอกสารอนุมัติแล้ว สามารถดาวน์โหลด PDF ได้
 

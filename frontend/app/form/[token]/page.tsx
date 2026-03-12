@@ -149,7 +149,7 @@ function getThaiIdHint(idCard: string): { text: string; tone: HelpTone } {
 
 export default function Home() {
   const params = useParams();
-  const accountId = params?.account_id as string;
+  const token = params?.token as string | undefined;
   const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM }));
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<SubmitStatus>({ kind: "idle" });
@@ -276,17 +276,21 @@ export default function Home() {
       return;
     }
 
+    if (!token) {
+      setStatus({ kind: "error", message: "ลิงก์ฟอร์มไม่ถูกต้อง" });
+      return;
+    }
+
     setLoading(true);
     try {
       // Keep prefix as its own field and send name without the prefix to avoid duplication.
-      const payload: SubmitRequestBody & { account_id?: string } = {
+      const payload: SubmitRequestBody = {
         name: `${form.name}${form.lastname ? ` ${form.lastname}` : ""}`.trim(),
         prefix: form.prefix,
         id_card: form.id_card,
         date_of_birth: form.date_of_birth,
         purpose: form.purpose,
         document_type: form.document_type,
-        account_id: accountId,
       };
 
       if (form.student_id.trim() !== "") payload.student_id = form.student_id.trim();
@@ -296,7 +300,7 @@ export default function Home() {
       if (form.father_name.trim() !== "") payload.father_name = form.father_name.trim();
       if (form.mother_name.trim() !== "") payload.mother_name = form.mother_name.trim();
 
-      const res = await fetch("/api/submit", {
+      const res = await fetch(`/api/form-links/${encodeURIComponent(token)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
