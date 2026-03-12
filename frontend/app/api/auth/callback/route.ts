@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSessionToken } from '@/lib/session';
+import { getOidcEndpoints } from '../../../../lib/oidc';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -17,8 +18,9 @@ export async function GET(request: Request) {
 
     const clientId = process.env.OIDC_CLIENT_ID;
     const clientSecret = process.env.OIDC_CLIENT_SECRET;
+    const oidcEndpoints = getOidcEndpoints();
 
-    if (!clientId || !clientSecret) {
+    if (!clientId || !clientSecret || !oidcEndpoints) {
         console.error("Missing OIDC credentials in environment");
         return NextResponse.redirect(new URL('/login?error=config_error', request.url));
     }
@@ -26,12 +28,10 @@ export async function GET(request: Request) {
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = host.includes('localhost') ? 'http' : 'https';
     const redirectUri = `${protocol}://${host}/api/auth/callback`;
-    const TOKEN_ENDPOINT = 'https://auth.krufame.work/auth/oauth/token';
-    const PROFILE_ENDPOINT = 'https://auth.krufame.work/auth/profile';
 
     try {
         // 1. Exchange the code for an access token
-        const tokenResponse = await fetch(TOKEN_ENDPOINT, {
+        const tokenResponse = await fetch(oidcEndpoints.tokenEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
         const accessToken = tokenData.access_token;
 
         // 2. Fetch user profile using the access token
-        const profileResponse = await fetch(PROFILE_ENDPOINT, {
+        const profileResponse = await fetch(oidcEndpoints.profileEndpoint, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
             },

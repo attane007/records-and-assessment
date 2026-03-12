@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
+import { getOidcEndpoints } from '../../../../lib/oidc';
 
 export async function GET(request: Request) {
-    const OIDC_ISSUER = 'https://auth.krufame.work/auth';
     const clientId = process.env.OIDC_CLIENT_ID;
+    const oidcEndpoints = getOidcEndpoints();
 
-    if (!clientId) {
-        console.error("Missing OIDC_CLIENT_ID in environment");
+    if (!clientId || !oidcEndpoints) {
+        console.error("Missing OIDC auth configuration in environment");
         return NextResponse.json({ error: "OIDC Configuration Error" }, { status: 500 });
     }
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
         state: Math.random().toString(36).substring(7),
     });
 
-    const authorizationUrl = `${OIDC_ISSUER}/login?${params.toString()}`;
+    const authorizationUrl = `${oidcEndpoints.authorizationEndpoint}?${params.toString()}`;
 
     // Redirect the user to the OIDC provider's login page
     return NextResponse.redirect(authorizationUrl);

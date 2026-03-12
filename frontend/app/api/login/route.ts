@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 8; // 8h
-    const token = await createSessionToken({ sub: "admin", username, exp });
+    const token = await createSessionToken({ sub: "admin", username, accountId: "admin", exp });
     const res = NextResponse.json({ ok: true });
     const isProd = process.env.NODE_ENV === "production";
     res.cookies.set("session", token, {
