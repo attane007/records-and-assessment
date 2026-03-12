@@ -266,6 +266,22 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		})
 	})
 
+	r.GET("/api/share/qrcode", func(c *gin.Context) {
+		url := c.Query("url")
+		if url == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+			return
+		}
+
+		png, err := utils.GenerateQRCode(url)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate qr code"})
+			return
+		}
+
+		c.Data(http.StatusOK, "image/png", png)
+	})
+
 	r.POST("/api/form-links/rotate", requireAuth, func(c *gin.Context) {
 		accountID := accountIDFromContext(c)
 		if accountID == "" {

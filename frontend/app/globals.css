@@ -30,3 +30,9 @@ a:not([class]) { color: var(--brand); }
 .text-xs{
   font-size: 0.9rem;
 }
+
+@layer base {
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}
