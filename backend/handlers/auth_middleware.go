@@ -60,7 +60,7 @@ type jsonWebKey struct {
 
 type AuthVerifier struct {
 	issuer       string
-	audience     string
+	audiences    []string
 	jwksURI      string
 	validMethods map[string]struct{}
 	client       *http.Client
@@ -129,12 +129,36 @@ func parseAllowedJWTMethods() map[string]struct{} {
 	return allowed
 }
 
+func parseAllowedAudiences() []string {
+	raw := strings.TrimSpace(os.Getenv("OIDC_AUDIENCE"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
+	}
+
+	if raw == "" {
+		return nil
+	}
+
+	allowed := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, part := range strings.Split(raw, ",") {
+		audience := strings.TrimSpace(part)
+		if audience == "" {
+			continue
+		}
+		if _, exists := seen[audience]; exists {
+			continue
+		}
+		seen[audience] = struct{}{}
+		allowed = append(allowed, audience)
+	}
+
+	return allowed
+}
+
 func NewAuthVerifierFromEnv() (*AuthVerifier, error) {
 	issuer := strings.TrimSpace(os.Getenv("OIDC_ISSUER"))
-	audience := strings.TrimSpace(os.Getenv("OIDC_AUDIENCE"))
-	if audience == "" {
-		audience = strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
-	}
+	audiences := parseAllowedAudiences()
 	jwksURI := strings.TrimSpace(os.Getenv("OIDC_JWKS_URI"))
 
 	if issuer == "" || jwksURI == "" {
@@ -153,7 +177,7 @@ func NewAuthVerifierFromEnv() (*AuthVerifier, error) {
 	if issuer == "" {
 		return nil, fmt.Errorf("missing OIDC_ISSUER")
 	}
-	if audience == "" {
+	if len(audiences) == 0 {
 		return nil, fmt.Errorf("missing OIDC_AUDIENCE (or OIDC_CLIENT_ID fallback)")
 	}
 	if jwksURI == "" {
@@ -162,7 +186,7 @@ func NewAuthVerifierFromEnv() (*AuthVerifier, error) {
 
 	return &AuthVerifier{
 		issuer:       issuer,
-		audience:     audience,
+		audiences:    audiences,
 		jwksURI:      jwksURI,
 		validMethods: parseAllowedJWTMethods(),
 		client:       &http.Client{Timeout: 8 * time.Second},
@@ -434,17 +458,32 @@ func claimString(claims Claims, keys ...string) string {
 	return ""
 }
 
-func claimAudienceContains(claims Claims, audience string) bool {
+func claimMatchesAny(value string, allowed []string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+
+	for _, item := range allowed {
+		if trimmed == item {
+			return true
+		}
+	}
+
+	return false
+}
+
+func claimAudienceContainsAny(claims Claims, audiences []string) bool {
 	value, exists := claims["aud"]
 	if !exists {
 		return false
 	}
 	switch typed := value.(type) {
 	case string:
-		return strings.TrimSpace(typed) == audience
+		return claimMatchesAny(typed, audiences)
 	case []any:
 		for _, item := range typed {
-			if asString, ok := item.(string); ok && strings.TrimSpace(asString) == audience {
+			if asString, ok := item.(string); ok && claimMatchesAny(asString, audiences) {
 				return true
 			}
 		}
@@ -460,8 +499,11 @@ func (v *AuthVerifier) validateClaims(claims Claims) error {
 	if issuer == "" || issuer != v.issuer {
 		return fmt.Errorf("invalid issuer")
 	}
-	if !claimAudienceContains(claims, v.audience) {
-		return fmt.Errorf("invalid audience")
+	if !claimAudienceContainsAny(claims, v.audiences) {
+		azpOrClientID := claimString(claims, "azp", "client_id")
+		if !claimMatchesAny(azpOrClientID, v.audiences) {
+			return fmt.Errorf("invalid audience")
+		}
 	}
 	if exp, ok := numberClaimAsInt64(claims, "exp"); !ok || now > exp+leeway {
 		return fmt.Errorf("token expired")
@@ -559,6 +601,7 @@ func RequireBearerAuth(verifier *AuthVerifier) gin.HandlerFunc {
 
 		claims, err := verifier.VerifyAccessToken(bearerToken)
 		if err != nil {
+			log.Printf("auth verification failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			c.Abort()
 			return

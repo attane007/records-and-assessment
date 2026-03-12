@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/session';
 
-const BACKEND_URL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
+const BACKEND_URL = (
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.API_BASE_URL ||
+  'http://localhost:8080'
+).replace(/\/$/, '');
 
 async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
   const session = await getSessionFromRequest(req);
@@ -17,12 +22,15 @@ async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT
 
   const cookie = req.headers.get('cookie') || '';
   const host = req.headers.get('host') || '';
+  const proto = req.headers.get('x-forwarded-proto') || '';
   if (cookie) headers.set('cookie', cookie);
   if (host) headers.set('x-forwarded-host', host);
+  if (proto) headers.set('x-forwarded-proto', proto);
 
   const fetchOptions: RequestInit = {
     method,
     headers,
+    cache: 'no-store',
   };
   if (body !== undefined && body !== null) {
     fetchOptions.body = JSON.stringify(body);

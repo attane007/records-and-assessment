@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/session";
 import AdminNavbar from "@/components/AdminNavbar";
 import SettingsForm from "@/components/SettingsForm";
@@ -10,7 +10,10 @@ export default async function SettingsPage() {
   if (!session) redirect("/login");
 
   // Fetch current officials data via Next.js API route which forwards to the Go backend
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
+  const proto = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
+  const baseUrl = `${proto}://${host}`;
   const apiUrl = `${baseUrl}/api/backend/officials`;
   let officials = { registrar_name: "", director_name: "", registrar_email: "", director_email: "" };
 

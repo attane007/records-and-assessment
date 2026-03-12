@@ -181,12 +181,13 @@ export async function GET(request: Request) {
             ? Math.floor(tokenData.expires_in)
             : 60 * 60;
         const exp = Math.floor(Date.now() / 1000) + expiresIn;
+        const backendBearerToken = tokenData.id_token ?? accessToken;
         const sessionPayload = {
             sub: String(accountId),
             username: String(username),
             accountId: String(accountId),
             exp,
-            accessToken,
+            accessToken: backendBearerToken,
             ...(tokenData.token_type ? { tokenType: tokenData.token_type } : {}),
         };
         const sessionToken = await createSessionToken(sessionPayload);
