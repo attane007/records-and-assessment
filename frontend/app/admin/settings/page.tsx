@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/session";
 import AdminNavbar from "@/components/AdminNavbar";
 import SettingsForm from "@/components/SettingsForm";
+import FormLinkManager from "@/components/FormLinkManager";
 import type { FormLinkCurrentResponse } from "@/lib/types/api";
 import "server-only";
 
@@ -79,6 +80,9 @@ export default async function SettingsPage() {
 
           {/* Settings Form (2-column layout) */}
           <SettingsForm initialData={officials} />
+
+          {/* Form Link Manager */}
+          <FormLinkManager initialFormUrl={publicFormUrl} />
         </div>
       </main>
     </div>
