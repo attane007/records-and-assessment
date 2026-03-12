@@ -25,7 +25,7 @@ export default function LandingPage() {
             <div className="flex gap-4">
               <Link
                 href="/admin"
-                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-slate-800 to-slate-900 dark:from-slate-100 dark:to-white dark:text-slate-900 rounded-xl shadow-lg shadow-slate-200 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 active:scale-95"
               >
                 เข้าสู่ระบบ
               </Link>
