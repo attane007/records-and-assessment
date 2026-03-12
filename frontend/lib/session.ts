@@ -13,6 +13,14 @@ type SignedPayload = {
 export type SessionPayload = AdminSession & {
   accessToken?: string;
   tokenType?: string;
+  refreshToken?: string;
+};
+
+type OidcTokenRefreshResponse = {
+  access_token: string;
+  token_type?: string;
+  refresh_token?: string;
+  expires_in?: number;
 };
 
 type CookieStore = {
@@ -94,6 +102,75 @@ export async function verifySignedToken<T extends SignedPayload>(token: string):
   }
 }
 
+const REFRESH_TOKEN_THRESHOLD_SECONDS = 5 * 60; // Refresh if less than 5 minutes remaining
+
+export async function refreshAccessToken(
+  refreshToken: string,
+  tokenEndpoint: string,
+  clientId: string,
+  clientSecret?: string
+): Promise<OidcTokenRefreshResponse | null> {
+  try {
+    const tokenBody = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+    });
+
+    const headers: HeadersInit = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+
+    if (clientSecret) {
+      headers["Authorization"] = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+    }
+
+    const response = await fetch(tokenEndpoint, {
+      method: "POST",
+      headers,
+      body: tokenBody.toString(),
+    });
+
+    if (!response.ok) {
+      console.error("Token refresh failed", { status: response.statusText });
+      return null;
+    }
+
+    const data = (await response.json()) as OidcTokenRefreshResponse;
+    return data;
+  } catch (error) {
+    console.error("Token refresh exception", error);
+    return null;
+  }
+}
+
+/**
+ * Parse JWT claims without validation (for refresh check)
+ */
+function parseJwtClaimsUnsafe(token: string): Partial<SessionPayload> | null {
+  try {
+    const [, payloadB64] = token.split(".");
+    if (!payloadB64) return null;
+    const padding = 4 - (payloadB64.length % 4);
+    const padded = payloadB64 + (padding < 4 ? "=".repeat(padding) : "");
+    const payload = JSON.parse(Buffer.from(padded.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8"));
+    return payload as Partial<SessionPayload>;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateSessionToken(
+  payload: SessionPayload,
+  expiresIn?: number
+): Promise<string> {
+  const newPayload = {
+    ...payload,
+    exp: payload.exp || Math.floor(Date.now() / 1000) + (expiresIn || 3600),
+  };
+  return createSessionToken(newPayload);
+}
+
 export async function getSessionFromCookies(): Promise<SessionPayload | null> {
   const jar = await getCookieStore();
   const token = jar.get("session")?.value;
@@ -101,12 +178,80 @@ export async function getSessionFromCookies(): Promise<SessionPayload | null> {
   return verifySessionToken(token);
 }
 
-export function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {
+export async function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {
   const cookieHeader = req.headers.get("cookie") || "";
   const token = cookieHeader
     .split(/;\s*/)
     .map((p) => p.split("="))
     .find(([k]) => k === "session")?.[1];
   if (!token) return Promise.resolve(null);
-  return verifySessionToken(decodeURIComponent(token));
+
+  const decodedToken = decodeURIComponent(token);
+
+  // First, try normal verification
+  let session = await verifySessionToken(decodedToken);
+
+  // If normal verification failed, try to extract claims and check if expired
+  if (!session) {
+    session = parseJwtClaimsUnsafe(decodedToken) as SessionPayload | null;
+    if (!session || typeof session.exp !== "number") return null;
+
+    // Token is expired, attempt refresh if refresh token exists
+    if (!session.refreshToken) return null; // Can't refresh without refresh token
+  }
+
+  // At this point, session is valid or we have the claims
+  const refreshToken = session.refreshToken;
+  if (!refreshToken) return session; // No refresh token, return as-is
+
+  // Check if token expires within threshold or is already expired
+  const now = Math.floor(Date.now() / 1000);
+  const timeUntilExpiry = session.exp - now;
+  const shouldRefresh = timeUntilExpiry <= REFRESH_TOKEN_THRESHOLD_SECONDS;
+
+  if (!shouldRefresh) {
+    // Token still valid for a while
+    return session;
+  }
+
+  // Token expiring soon or already expired, attempt refresh
+  const clientId = process.env.OIDC_CLIENT_ID || "";
+  const clientSecret = process.env.OIDC_CLIENT_SECRET;
+
+  try {
+    const { getOidcEndpoints } = await import("@/lib/oidc");
+    const endpoints = await getOidcEndpoints();
+
+    if (!endpoints?.tokenEndpoint) {
+      console.warn("OIDC endpoints not available for token refresh");
+      return session && timeUntilExpiry > 0 ? session : null;
+    }
+
+    const refreshResult = await refreshAccessToken(
+      refreshToken,
+      endpoints.tokenEndpoint,
+      clientId,
+      clientSecret
+    );
+
+    if (!refreshResult) {
+      // Refresh failed, return existing session only if still valid
+      return session && timeUntilExpiry > 0 ? session : null;
+    }
+
+    // Update session with new tokens
+    const newExp = Math.floor(Date.now() / 1000) + (refreshResult.expires_in || 3600);
+    const updatedSession: SessionPayload = {
+      ...session,
+      accessToken: refreshResult.access_token,
+      exp: newExp,
+      ...(refreshResult.token_type ? { tokenType: refreshResult.token_type } : {}),
+      ...(refreshResult.refresh_token ? { refreshToken: refreshResult.refresh_token } : {}),
+    };
+
+    return updatedSession;
+  } catch (error) {
+    console.error("Error during session refresh", error);
+    return session && timeUntilExpiry > 0 ? session : null;
+  }
 }

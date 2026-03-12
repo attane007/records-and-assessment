@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getSessionFromRequest } from "@/lib/session";
+import { getSessionFromRequest, updateSessionToken } from "@/lib/session";
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
 
@@ -32,7 +32,19 @@ export async function POST(
 
     const text = await res.text();
     const contentType = res.headers.get("content-type") || "application/json";
-    return new NextResponse(text, { status: res.status, headers: { "Content-Type": contentType } });
+    const response = new NextResponse(text, { status: res.status, headers: { "Content-Type": contentType } });
+    
+    // Persist refreshed session token back to cookie
+    const sessionToken = await updateSessionToken(session);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
+    
+    return response;
   } catch {
     return NextResponse.json({ error: "proxy error" }, { status: 500 });
   }

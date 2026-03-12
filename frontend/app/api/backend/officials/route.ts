@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSessionFromRequest } from '@/lib/session';
+import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 const BACKEND_URL = (
   process.env.BACKEND_URL ||
@@ -11,7 +11,7 @@ const BACKEND_URL = (
 async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
   const session = await getSessionFromRequest(req);
   if (!session?.accessToken) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    return { response: NextResponse.json({ error: 'unauthorized' }, { status: 401 }), session: null };
   }
 
   const url = `${BACKEND_URL}${path}`;
@@ -47,24 +47,66 @@ async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT
     }
 
     // Use NextResponse.json to properly set content-type and body
-    return NextResponse.json(data, { status: res.status });
+    return { response: NextResponse.json(data, { status: res.status }), session };
   } catch (err) {
     console.error('Error forwarding request to backend:', err);
-    return NextResponse.json({ error: 'Backend forwarding failed' }, { status: 502 });
+    return { response: NextResponse.json({ error: 'Backend forwarding failed' }, { status: 502 }), session };
   }
 }
 
 export async function GET(req: Request) {
   // Forward GET /api/officials and include incoming headers
-  return forward(req, '/api/officials', 'GET');
+  const { response, session } = await forward(req, '/api/officials', 'GET');
+  
+  // Persist session cookie
+  if (session) {
+    const sessionToken = await updateSessionToken(session);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
+  }
+  
+  return response;
 }
 
 export async function POST(req: Request) {
   const body: unknown = await req.json().catch(() => null);
-  return forward(req, '/api/officials', 'POST', body);
+  const { response, session } = await forward(req, '/api/officials', 'POST', body);
+  
+  // Persist session cookie
+  if (session) {
+    const sessionToken = await updateSessionToken(session);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
+  }
+  
+  return response;
 }
 
 export async function PUT(req: Request) {
   const body: unknown = await req.json().catch(() => null);
-  return forward(req, '/api/officials', 'PUT', body);
+  const { response, session } = await forward(req, '/api/officials', 'PUT', body);
+  
+  // Persist session cookie
+  if (session) {
+    const sessionToken = await updateSessionToken(session);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
+  }
+  
+  return response;
 }

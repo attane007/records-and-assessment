@@ -14,6 +14,7 @@ type OidcTokenResponse = {
     access_token?: string;
     token_type?: string;
     id_token?: string;
+    refresh_token?: string;
     expires_in?: number;
 };
 
@@ -189,8 +190,16 @@ export async function GET(request: Request) {
             exp,
             accessToken: backendBearerToken,
             ...(tokenData.token_type ? { tokenType: tokenData.token_type } : {}),
+            ...(tokenData.refresh_token ? { refreshToken: tokenData.refresh_token } : {}),
         };
         const sessionToken = await createSessionToken(sessionPayload);
+        
+        // Log for debugging
+        if (tokenData.refresh_token) {
+            console.log('Session created with refresh token');
+        } else {
+            console.warn('OIDC response did not include refresh_token');
+        }
 
         // 4. Set session cookie and redirect to admin dashboard
         const response = NextResponse.redirect(new URL('/admin', request.url));

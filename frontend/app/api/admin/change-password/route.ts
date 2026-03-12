@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/session";
+import { getSessionFromRequest, updateSessionToken } from "@/lib/session";
 import type { ApiErrorResponse, ChangePasswordRequestBody } from "@/lib/types/api";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -55,12 +55,24 @@ export async function POST(req: Request) {
 
     const data: unknown = await response.json().catch(() => null);
 
-    if (!response.ok) {
-      const message = isApiErrorResponse(data) ? data.error : "failed to change password";
-      return NextResponse.json({ error: message }, { status: response.status });
-    }
+    // Persist session cookie
+    const sessionToken = await updateSessionToken(session);
+    const responseObj = response.ok
+      ? NextResponse.json({ message: "password changed successfully" })
+      : NextResponse.json(
+          { error: isApiErrorResponse(data) ? data.error : "failed to change password" },
+          { status: response.status }
+        );
+    
+    responseObj.cookies.set("session", sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
 
-    return NextResponse.json({ message: "password changed successfully" });
+    return responseObj;
   } catch (error) {
     console.error("Change password error:", error);
     return NextResponse.json({ error: "internal server error" }, { status: 500 });

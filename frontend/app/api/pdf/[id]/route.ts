@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
-import { getSessionFromRequest } from '@/lib/session';
+import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -28,7 +28,19 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const headers = new Headers();
     res.headers.forEach((v, k) => headers.set(k, v));
 
-    return new NextResponse(Buffer.from(array), { status: res.status, headers });
+    const response = new NextResponse(Buffer.from(array), { status: res.status, headers });
+    
+    // Persist session cookie
+    const sessionToken = await updateSessionToken(session);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    });
+
+    return response;
   } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
