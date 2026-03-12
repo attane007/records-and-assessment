@@ -3,6 +3,7 @@ import Link from 'next/link';
 interface AdminNavbarProps {
   session: {
     username: string;
+    accountId?: string;
   };
   currentPage: 'dashboard' | 'requests' | 'settings';
 }
@@ -35,9 +36,37 @@ export default function AdminNavbar({ session, currentPage }: AdminNavbarProps) 
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0"></div>
               <div className="text-sm">
                 <div className="font-medium text-slate-900 dark:text-slate-100 leading-tight">{session.username}</div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">ผู้ดูแลระบบ</div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">Account: {session.accountId || 'standard'}</div>
               </div>
             </div>
+
+            {/* Mobile Form Link Button — only on small screens */}
+            {session.accountId && (
+              <Link
+                href={`/${session.accountId}`}
+                target="_blank"
+                className="lg:hidden flex items-center justify-center w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800"
+                title="เปิดลิงก์ฟอร์ม"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </Link>
+            )}
+
+            {/* Public Form Link Desktop — hidden on mobile */}
+            {session.accountId && (
+              <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-800/50">
+                <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Public Form</div>
+                <Link
+                  href={`/${session.accountId}`}
+                  target="_blank"
+                  className="text-xs font-mono text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 underline underline-offset-2"
+                >
+                  /{session.accountId}
+                </Link>
+              </div>
+            )}
 
             {/* Navigation Buttons */}
             <div className="flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 bg-gray-100 dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-600">

@@ -75,8 +75,9 @@ func (s *AdminService) InitializeDefaultAdmin(ctx context.Context, username, pas
 	}
 
 	admin := models.Admin{
-		Username: username,
-		Password: string(hashedPassword),
+		AccountID: username, // For defaults, AccountID is often the username
+		Username:  username,
+		Password:  string(hashedPassword),
 	}
 
 	_, err = s.collection.InsertOne(ctx, admin)

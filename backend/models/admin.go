@@ -2,8 +2,9 @@ package models
 
 // Admin holds admin user credentials
 type Admin struct {
-	Username string `bson:"username" json:"username"`
-	Password string `bson:"password" json:"password"` // This will be hashed
+	AccountID string `bson:"account_id" json:"account_id"`
+	Username  string `bson:"username" json:"username"`
+	Password  string `bson:"password" json:"password"` // This will be hashed
 }
 
 // ChangePasswordRequest represents the request payload for changing password

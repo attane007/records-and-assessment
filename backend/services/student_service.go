@@ -18,6 +18,7 @@ import (
 // SaveStudent inserts a student document and returns the inserted ID.
 func SaveStudent(ctx context.Context, coll *mongo.Collection, payload models.StudentData) (interface{}, error) {
 	res, err := coll.InsertOne(ctx, bson.M{
+		"account_id":    payload.AccountID,
 		"prefix":        payload.Prefix,
 		"document_type": payload.DocumentType,
 		"name":          payload.Name,
@@ -60,10 +61,11 @@ type StatsResult struct {
 }
 
 // GetStats computes total, yearly and monthly counts from the collection.
-func GetStats(ctx context.Context, coll *mongo.Collection) (StatsResult, error) {
+func GetStats(ctx context.Context, coll *mongo.Collection, accountID string) (StatsResult, error) {
 	var out StatsResult
 
-	total, err := coll.CountDocuments(ctx, bson.D{})
+	filter := bson.M{"account_id": accountID}
+	total, err := coll.CountDocuments(ctx, filter)
 	if err != nil {
 		return out, err
 	}
@@ -75,6 +77,7 @@ func GetStats(ctx context.Context, coll *mongo.Collection) (StatsResult, error) 
 		Count int32 `bson:"count"`
 	}
 	yearPipe := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: filter}},
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{{Key: "$year", Value: "$created_at"}}},
 			{Key: "count", Value: bson.D{{Key: "$sum", Value: 1}}},
@@ -103,6 +106,7 @@ func GetStats(ctx context.Context, coll *mongo.Collection) (StatsResult, error) 
 		Count int32 `bson:"count"`
 	}
 	monthPipe := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: filter}},
 		bson.D{{Key: "$group", Value: bson.D{
 			{Key: "_id", Value: bson.D{
 				{Key: "y", Value: bson.D{{Key: "$year", Value: "$created_at"}}},
@@ -150,18 +154,20 @@ type RequestRecord struct {
 }
 
 // GetRequests retrieves all student requests with pagination
-func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int) ([]RequestRecord, int64, error) {
+func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int, accountID string) ([]RequestRecord, int64, error) {
 	// Calculate skip value for pagination
 	skip := (page - 1) * limit
+	filter := bson.M{"account_id": accountID}
 
 	// Get total count
-	total, err := coll.CountDocuments(ctx, bson.D{})
+	total, err := coll.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Get paginated results, sorted by created_at descending (newest first)
 	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: filter}},
 		bson.D{{Key: "$sort", Value: bson.D{{Key: "created_at", Value: -1}}}},
 		bson.D{{Key: "$skip", Value: skip}},
 		bson.D{{Key: "$limit", Value: limit}},
@@ -182,10 +188,10 @@ func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int) (
 }
 
 // GetRequestByID retrieves a single request by its ID
-func GetRequestByID(ctx context.Context, coll *mongo.Collection, id interface{}) (*RequestRecord, error) {
+func GetRequestByID(ctx context.Context, coll *mongo.Collection, id interface{}, accountID string) (*RequestRecord, error) {
 	var request RequestRecord
 
-	filter := bson.M{"_id": id}
+	filter := bson.M{"_id": id, "account_id": accountID}
 	err := coll.FindOne(ctx, filter).Decode(&request)
 	if err != nil {
 		return nil, err
@@ -195,8 +201,8 @@ func GetRequestByID(ctx context.Context, coll *mongo.Collection, id interface{})
 }
 
 // UpdateRequestStatus updates the status of a request
-func UpdateRequestStatus(ctx context.Context, coll *mongo.Collection, id interface{}, status string) error {
-	filter := bson.M{"_id": id}
+func UpdateRequestStatus(ctx context.Context, coll *mongo.Collection, id interface{}, status string, accountID string) error {
+	filter := bson.M{"_id": id, "account_id": accountID}
 	update := bson.M{
 		"$set": bson.M{
 			"status":     status,
@@ -270,21 +276,21 @@ func ToObjectID(id interface{}) (primitive.ObjectID, error) {
 }
 
 // UpsertSignature stores one signature block for a given request and role, and records an audit log.
-func UpsertSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, ipAddress, userAgent string) error {
+func UpsertSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, ipAddress, userAgent string, accountID string) error {
 	path, err := signaturePathByRole(role)
 	if err != nil {
 		return err
 	}
 
 	// Fetch current state to compute hash
-	record, err := GetRequestByID(ctx, mongoColl, id)
+	record, err := GetRequestByID(ctx, mongoColl, id, accountID)
 	if err != nil {
 		return err
 	}
 	hash := ComputeRequestHash(record)
 	sig.DocumentHash = hash
 
-	filter := bson.M{"_id": id}
+	filter := bson.M{"_id": id, "account_id": accountID}
 	update := bson.M{
 		"$set": bson.M{
 			path:         sig,
@@ -319,7 +325,7 @@ func UpsertSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl
 }
 
 // UpsertOfficialDecisionAndSignature stores one official signature and decision for a given role, and records an audit log.
-func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, decision models.OfficialDecisionValue, ipAddress, userAgent string) error {
+func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, role models.SignRole, sig models.SignatureBlock, decision models.OfficialDecisionValue, ipAddress, userAgent string, accountID string) error {
 	if !models.IsValidOfficialDecision(decision) {
 		return fmt.Errorf("invalid official decision: %s", decision)
 	}
@@ -334,7 +340,7 @@ func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Co
 	}
 
 	// Fetch current state to compute hash
-	record, err := GetRequestByID(ctx, mongoColl, id)
+	record, err := GetRequestByID(ctx, mongoColl, id, accountID)
 	if err != nil {
 		return err
 	}
@@ -348,7 +354,7 @@ func UpsertOfficialDecisionAndSignature(ctx context.Context, mongoColl *mongo.Co
 		DocumentHash: hash,
 	}
 
-	filter := bson.M{"_id": id}
+	filter := bson.M{"_id": id, "account_id": accountID}
 	update := bson.M{
 		"$set": bson.M{
 			sigPath:      sig,
@@ -405,8 +411,8 @@ func ResolveStatusFromDecisions(currentStatus string, decisions models.RequestDe
 }
 
 // RecomputeStatusFromOfficialDecisions recalculates and persists status using decision fields.
-func RecomputeStatusFromOfficialDecisions(ctx context.Context, coll *mongo.Collection, id interface{}) (string, error) {
-	record, err := GetRequestByID(ctx, coll, id)
+func RecomputeStatusFromOfficialDecisions(ctx context.Context, coll *mongo.Collection, id interface{}, accountID string) (string, error) {
+	record, err := GetRequestByID(ctx, coll, id, accountID)
 	if err != nil {
 		return "", err
 	}
@@ -416,7 +422,7 @@ func RecomputeStatusFromOfficialDecisions(ctx context.Context, coll *mongo.Colle
 		return nextStatus, nil
 	}
 
-	if err := UpdateRequestStatus(ctx, coll, id, nextStatus); err != nil {
+	if err := UpdateRequestStatus(ctx, coll, id, nextStatus, accountID); err != nil {
 		return "", err
 	}
 	return nextStatus, nil

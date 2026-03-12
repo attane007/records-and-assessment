@@ -12,7 +12,12 @@ export default async function AdminPage() {
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
   let stats: { total: number; by_year: { year: number; count: number }[]; by_month: { year: number; month: number; count: number }[] } = { total: 0, by_year: [], by_month: [] };
   try {
-    const res = await fetch(`${backendURL}/api/stats`, { cache: "no-store" });
+    const res = await fetch(`${backendURL}/api/stats`, {
+      cache: "no-store",
+      headers: {
+        "X-Account-ID": session.accountId,
+      }
+    });
     if (res.ok) stats = await res.json();
   } catch { }
 

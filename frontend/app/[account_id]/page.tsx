@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import SignatureModal from "@/components/signature/SignatureModal";
@@ -147,6 +148,8 @@ function getThaiIdHint(idCard: string): { text: string; tone: HelpTone } {
 }
 
 export default function Home() {
+  const params = useParams();
+  const accountId = params?.account_id as string;
   const [form, setForm] = useState<FormState>(() => ({ ...EMPTY_FORM }));
   const [errors, setErrors] = useState<FormErrors>({});
   const [status, setStatus] = useState<SubmitStatus>({ kind: "idle" });
@@ -276,13 +279,14 @@ export default function Home() {
     setLoading(true);
     try {
       // Keep prefix as its own field and send name without the prefix to avoid duplication.
-      const payload: SubmitRequestBody = {
+      const payload: SubmitRequestBody & { account_id?: string } = {
         name: `${form.name}${form.lastname ? ` ${form.lastname}` : ""}`.trim(),
         prefix: form.prefix,
         id_card: form.id_card,
         date_of_birth: form.date_of_birth,
         purpose: form.purpose,
         document_type: form.document_type,
+        account_id: accountId,
       };
 
       if (form.student_id.trim() !== "") payload.student_id = form.student_id.trim();
@@ -872,11 +876,10 @@ function PreviewKV({
         ) : null}
       </div>
       <div
-        className={`max-w-[60%] text-right font-medium break-words ${
-          missing
+        className={`max-w-[60%] text-right font-medium break-words ${missing
             ? "text-rose-700 dark:text-rose-300"
             : "text-slate-900 dark:text-slate-100"
-        }`}
+          }`}
       >
         {missing ? "ยังไม่กรอก" : normalizedValue || "-"}
       </div>

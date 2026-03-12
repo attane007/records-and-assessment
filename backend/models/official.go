@@ -2,6 +2,7 @@ package models
 
 // Official holds names/titles for school officials used in generated PDFs.
 type Official struct {
+	AccountID      string `bson:"account_id" json:"account_id"`
 	RegistrarName  string `bson:"registrar_name" json:"registrar_name"`
 	DirectorName   string `bson:"director_name" json:"director_name"`
 	RegistrarEmail string `bson:"registrar_email" json:"registrar_email"`

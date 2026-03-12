@@ -54,6 +54,7 @@ type StudentData struct {
 	DateOfBirth  string `json:"date_of_birth" bson:"date_of_birth" binding:"required"`
 	Purpose      string `json:"purpose" bson:"purpose" binding:"required"`
 	Status       string `json:"status" bson:"status"` // pending, completed, cancelled
+	AccountID    string `json:"account_id" bson:"account_id" binding:"required"`
 
 	// optional
 	Class        string `json:"class" bson:"class"`

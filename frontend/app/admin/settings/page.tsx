@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getSessionFromCookies } from "@/lib/session";
 import AdminNavbar from "@/components/AdminNavbar";
 import SettingsForm from "@/components/SettingsForm";
@@ -14,7 +15,12 @@ export default async function SettingsPage() {
   let officials = { registrar_name: "", director_name: "", registrar_email: "", director_email: "" };
 
   try {
-    const res = await fetch(apiUrl, { cache: "no-store" });
+    const res = await fetch(apiUrl, {
+      cache: "no-store",
+      headers: {
+        cookie: (await cookies()).toString()
+      }
+    });
     if (res.ok) {
       officials = await res.json();
     } else {

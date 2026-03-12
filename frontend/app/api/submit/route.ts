@@ -31,8 +31,11 @@ export async function POST(req: Request) {
     }
 
     const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Account-ID": (body as any).account_id || "",
+      },
       body: JSON.stringify(body),
     });
 

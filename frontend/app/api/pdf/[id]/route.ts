@@ -2,8 +2,13 @@ import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
+import { getSessionFromRequest } from '@/lib/session';
+
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const session = await getSessionFromRequest(req);
+    const accountId = session?.accountId || '';
+
     const { id } = await context.params;
     const url = `${backendUrl}/api/pdf/${encodeURIComponent(id)}`;
 
@@ -11,6 +16,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       method: 'GET',
       headers: {
         cookie: req.headers.get('cookie') || '',
+        'X-Account-ID': accountId,
       },
     });
 

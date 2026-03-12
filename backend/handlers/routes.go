@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -166,12 +167,12 @@ func notifyAdminSubmissionAsync(record *services.RequestRecord) {
 	}(snapshot)
 }
 
-func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, publicBaseURL string) {
+func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, publicBaseURL string, accountID string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
-		results, err := services.CreateAndSendOfficialSignLinks(ctx, signLinksColl, officialsColl, requestID, publicBaseURL, 7)
+		results, err := services.CreateAndSendOfficialSignLinks(ctx, signLinksColl, officialsColl, requestID, publicBaseURL, 7, accountID)
 		if err != nil {
 			log.Printf("official sign link dispatch failed for request %s: %v", requestID.Hex(), err)
 			return
@@ -224,6 +225,11 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
+		if strings.TrimSpace(payload.AccountID) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "account_id is required"})
+			return
+		}
+
 		id, err := services.SaveStudent(ctx, mongoColl, payload)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save data"})
@@ -235,10 +241,16 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// GET /api/stats - return total count, counts by year and by month
 	r.GET("/api/stats", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 		defer cancel()
 
-		stats, err := services.GetStats(ctx, mongoColl)
+		stats, err := services.GetStats(ctx, mongoColl, accountID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to aggregate stats"})
 			return
@@ -270,21 +282,31 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		requestBefore, err := services.GetRequestByID(ctx, mongoColl, objectID)
+		// For student signatures via submit, usually the link or the process needs to know the account.
+		// Since it's public, maybe they get accountID from the request or URL, but here we require
+		// it to be sent in the header or payload, or we derive it from the sign link.
+		// Wait, this route is for the public form right after submission usually.
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
+			return
+		}
+
+		requestBefore, err := services.GetRequestByID(ctx, mongoColl, objectID, accountID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
 			return
 		}
 		hadStudentSignature := hasStudentSignature(requestBefore)
 
-		if err := services.UpsertSignature(ctx, mongoColl, auditColl, objectID, models.SignRoleStudent, sig, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+		if err := services.UpsertSignature(ctx, mongoColl, auditColl, objectID, models.SignRoleStudent, sig, c.ClientIP(), c.GetHeader("User-Agent"), accountID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
 		}
 
 		if !hadStudentSignature {
 			notifyAdminSubmissionAsync(requestBefore)
-			notifyOfficialsSigningLinksAsync(objectID, signLinksColl, officialsColl, buildPublicBaseURL(c))
+			notifyOfficialsSigningLinksAsync(objectID, signLinksColl, officialsColl, buildPublicBaseURL(c), accountID)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "student signature saved"})
@@ -292,6 +314,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// POST /api/requests/:id/sign-links - create official sign link from admin workflow
 	r.POST("/api/requests/:id/sign-links", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
 		idStr := c.Param("id")
 		objectID, err := primitive.ObjectIDFromHex(idStr)
 		if err != nil {
@@ -316,7 +344,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		defer cancel()
 
 		if payload.Channel == "email" && recipientEmail == "" {
-			registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl)
+			registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl, accountID)
 			if role == models.SignRoleRegistrar {
 				recipientEmail = strings.TrimSpace(registrarEmail)
 			} else {
@@ -376,8 +404,13 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		validationErr := services.ValidateSignLink(record)
 		active := validationErr == nil
 
-		request, reqErr := services.GetRequestByID(ctx, mongoColl, record.RequestID)
-		if reqErr != nil {
+		// For sign-links verifying, we must fetch the request.
+		// Since we don't have accountID here, and GetRequestByID requires it,
+		// we should fetch the request without it here, or use the sign link's relation.
+		// Let's create a GetRequestByIDWithoutAccountID or use a direct query.
+		var request models.StudentData // We'll just read it directly since it's a public read context
+		err = mongoColl.FindOne(ctx, bson.M{"_id": record.RequestID}).Decode(&request)
+		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
 			return
 		}
@@ -390,7 +423,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			"revoked":    record.Revoked,
 			"active":     active,
 			"request": gin.H{
-				"id":            request.ID,
+				"id":            record.RequestID.Hex(),
 				"prefix":        request.Prefix,
 				"name":          request.Name,
 				"document_type": request.DocumentType,
@@ -452,11 +485,17 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, record.RequestID, record.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+		var req models.StudentData
+		if err := mongoColl.FindOne(ctx, bson.M{"_id": record.RequestID}).Decode(&req); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+
+		if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, record.RequestID, record.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent"), req.AccountID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 			return
 		}
-		if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, record.RequestID); err != nil {
+		if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, record.RequestID, req.AccountID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request status"})
 			return
 		}
@@ -622,8 +661,20 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		var requestBefore *services.RequestRecord
 		hadStudentSignature := false
+		var accountID string
+
+		// To use GetRequestByID we need accountID. But for session complete, we only have sessionID.
+		// So we query the request directly without accountID, or use the signLink.
+		// Actually, let's just fetch the raw request to get its account_id.
+		var rawRequest models.StudentData
+		if err := mongoColl.FindOne(ctx, bson.M{"_id": session.RequestID}).Decode(&rawRequest); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+		accountID = rawRequest.AccountID
+
 		if session.Role == models.SignRoleStudent {
-			requestBefore, err = services.GetRequestByID(ctx, mongoColl, session.RequestID)
+			requestBefore, err = services.GetRequestByID(ctx, mongoColl, session.RequestID, accountID)
 			if err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
 				return
@@ -642,16 +693,16 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 				return
 			}
 
-			if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+			if err := services.UpsertOfficialDecisionAndSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, decision, c.ClientIP(), c.GetHeader("User-Agent"), accountID); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 				return
 			}
-			if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, session.RequestID); err != nil {
+			if _, err := services.RecomputeStatusFromOfficialDecisions(ctx, mongoColl, session.RequestID, accountID); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update request status"})
 				return
 			}
 		} else {
-			if err := services.UpsertSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+			if err := services.UpsertSignature(ctx, mongoColl, auditColl, session.RequestID, session.Role, sig, c.ClientIP(), c.GetHeader("User-Agent"), accountID); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save signature"})
 				return
 			}
@@ -668,7 +719,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		if session.Role == models.SignRoleStudent && !hadStudentSignature {
 			notifyAdminSubmissionAsync(requestBefore)
-			notifyOfficialsSigningLinksAsync(session.RequestID, signLinksColl, officialsColl, buildPublicBaseURL(c))
+			notifyOfficialsSigningLinksAsync(session.RequestID, signLinksColl, officialsColl, buildPublicBaseURL(c), accountID)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "signature saved", "session_id": session.ID})
@@ -676,6 +727,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// GET /api/requests - return paginated list of student requests
 	r.GET("/api/requests", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
 		// Parse pagination parameters
 		pageStr := c.DefaultQuery("page", "1")
 		limitStr := c.DefaultQuery("limit", "20")
@@ -693,7 +750,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 		defer cancel()
 
-		requests, total, err := services.GetRequests(ctx, mongoColl, page, limit)
+		requests, total, err := services.GetRequests(ctx, mongoColl, page, limit, accountID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch requests"})
 			return
@@ -710,6 +767,16 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// GET /api/pdf/:id - generate PDF for a specific request
 	r.GET("/api/pdf/:id", func(c *gin.Context) {
+		accountID := c.Query("account_id")
+		if accountID == "" {
+			// fallback to header for auth users viewing PDFs
+			accountID = c.GetHeader("X-Account-ID")
+		}
+		if accountID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
+			return
+		}
+
 		idStr := c.Param("id")
 
 		// Convert string ID to ObjectID
@@ -723,7 +790,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		defer cancel()
 
 		// Get the specific request
-		request, err := services.GetRequestByID(ctx, mongoColl, objectID)
+		request, err := services.GetRequestByID(ctx, mongoColl, objectID, accountID)
 		if err != nil {
 			log.Printf("request not found for id %s: %v", idStr, err)
 			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
@@ -731,7 +798,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		}
 
 		// Try to load official names from DB, fall back to dummy defaults
-		registrarName, directorName, offErr := services.GetOfficialsFromDB(ctx, officialsColl)
+		registrarName, directorName, offErr := services.GetOfficialsFromDB(ctx, officialsColl, accountID)
 		if offErr != nil || registrarName == "" || directorName == "" {
 			// fallback to env/defaults
 			registrarName, directorName = services.GetOfficials()
@@ -755,6 +822,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// PUT /api/requests/:id/status - update request status
 	r.PUT("/api/requests/:id/status", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
 		idStr := c.Param("id")
 
 		// Convert string ID to ObjectID
@@ -776,7 +849,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err = services.UpdateRequestStatus(ctx, mongoColl, objectID, payload.Status)
+		err = services.UpdateRequestStatus(ctx, mongoColl, objectID, payload.Status, accountID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update status"})
 			return
@@ -787,11 +860,20 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// GET /api/officials - get current officials data
 	r.GET("/api/officials", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			accountID = c.Query("account_id") // allow public view if needed for some flows
+		}
+		if accountID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
+			return
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		registrarName, directorName, err := services.GetOfficialsFromDB(ctx, officialsColl)
-		registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl)
+		registrarName, directorName, err := services.GetOfficialsFromDB(ctx, officialsColl, accountID)
+		registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl, accountID)
 		if err != nil || (registrarName == "" && directorName == "") {
 			// Return default values if no data found
 			registrarName, directorName = services.GetOfficials()
@@ -807,6 +889,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	// POST /api/officials - update officials data
 	r.POST("/api/officials", func(c *gin.Context) {
+		accountID := c.GetHeader("X-Account-ID")
+		if accountID == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
+			return
+		}
+
 		var payload models.Official
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid data format"})
@@ -821,7 +909,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err := services.SaveOfficialsToDB(ctx, officialsColl, payload.RegistrarName, payload.DirectorName, payload.RegistrarEmail, payload.DirectorEmail)
+		err := services.SaveOfficialsToDB(ctx, officialsColl, accountID, payload.RegistrarName, payload.DirectorName, payload.RegistrarEmail, payload.DirectorEmail)
 		if err != nil {
 			log.Printf("Error saving officials: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save officials data"})
@@ -884,10 +972,9 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		// For now, we'll use the default admin username from environment
-		// In the future, this could be extracted from session/token
+		// For now, we'll use the default admin username from environment or token
 		defaultUsername := "admin"
-		if envUser := c.Request.Header.Get("X-Admin-User"); envUser != "" {
+		if envUser := c.Request.Header.Get("X-Account-ID"); envUser != "" {
 			defaultUsername = envUser
 		}
 
@@ -940,16 +1027,17 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		// Optionally fetch basic request info if logs exist
 		var requestInfo gin.H
-		request, err := services.GetRequestByID(ctx, mongoColl, logs[0].RequestID)
+		// Get audit log's associated request. We can fetch it directly to bypass account_id since this is public verification page
+		var publicRequest models.StudentData
+		err = mongoColl.FindOne(ctx, bson.M{"_id": logs[0].RequestID}).Decode(&publicRequest)
 		if err == nil {
 			requestInfo = gin.H{
-				"prefix":        request.Prefix,
-				"name":          request.Name,
-				"document_type": request.DocumentType,
-				"purpose":       request.Purpose,
-				"created_at":    request.CreatedAt,
+				"prefix":        publicRequest.Prefix,
+				"name":          publicRequest.Name,
+				"document_type": publicRequest.DocumentType,
+				"purpose":       publicRequest.Purpose,
+				"created_at":    logs[0].Timestamp, // Using audit log timestamp since basic model might not have create_at if not projected
 			}
 		}
 

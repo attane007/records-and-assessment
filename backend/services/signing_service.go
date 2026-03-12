@@ -161,13 +161,14 @@ type OfficialSignLinkDelivery struct {
 }
 
 // CreateAndSendOfficialSignLinks creates and emails sign links for roles with configured emails.
-func CreateAndSendOfficialSignLinks(ctx context.Context, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, requestID primitive.ObjectID, publicBaseURL string, expiryDays int) ([]OfficialSignLinkDelivery, error) {
+// It also propagates the accountID.
+func CreateAndSendOfficialSignLinks(ctx context.Context, signLinksColl *mongo.Collection, officialsColl *mongo.Collection, requestID primitive.ObjectID, publicBaseURL string, expiryDays int, accountID string) ([]OfficialSignLinkDelivery, error) {
 	baseURL := strings.TrimRight(strings.TrimSpace(publicBaseURL), "/")
 	if baseURL == "" {
 		return nil, fmt.Errorf("public base url is required")
 	}
 
-	registrarEmail, directorEmail, err := GetOfficialEmailsFromDB(ctx, officialsColl)
+	registrarEmail, directorEmail, err := GetOfficialEmailsFromDB(ctx, officialsColl, accountID)
 	if err != nil {
 		return nil, err
 	}

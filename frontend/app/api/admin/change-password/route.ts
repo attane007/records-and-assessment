@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionFromCookies } from "@/lib/session";
+import { getSessionFromRequest } from "@/lib/session";
 import type { ApiErrorResponse, ChangePasswordRequestBody } from "@/lib/types/api";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -18,7 +18,7 @@ function isChangePasswordRequestBody(value: unknown): value is ChangePasswordReq
 export async function POST(req: Request) {
   try {
     // Check if user is authenticated
-    const session = await getSessionFromCookies();
+    const session = await getSessionFromRequest(req);
     if (!session) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     const currentPassword = body.currentPassword;
     const newPassword = body.newPassword;
-    
+
     if (!currentPassword || !newPassword) {
       return NextResponse.json({ error: "current password and new password are required" }, { status: 400 });
     }
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Account-ID": session.accountId || "",
         "X-Admin-User": session.username || "admin",
       },
       body: JSON.stringify({

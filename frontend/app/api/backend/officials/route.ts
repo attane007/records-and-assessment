@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
+import { getSessionFromRequest } from '@/lib/session';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
 
-async function forward(path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown, incomingHeaders?: Headers) {
-  const url = `${BACKEND_URL}${path}`;
-  const headers = new Headers({ 'Content-Type': 'application/json' });
+async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
+  const session = await getSessionFromRequest(req);
+  const accountId = session?.accountId || '';
 
-  if (incomingHeaders) {
-    const cookie = incomingHeaders.get('cookie') || '';
-    const host = incomingHeaders.get('host') || '';
-    if (cookie) headers.set('cookie', cookie);
-    if (host) headers.set('x-forwarded-host', host);
-  }
+  const url = `${BACKEND_URL}${path}`;
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'X-Account-ID': accountId,
+  });
+
+  const cookie = req.headers.get('cookie') || '';
+  const host = req.headers.get('host') || '';
+  if (cookie) headers.set('cookie', cookie);
+  if (host) headers.set('x-forwarded-host', host);
 
   const fetchOptions: RequestInit = {
     method,
@@ -41,15 +46,15 @@ async function forward(path: string, method: 'GET' | 'POST' | 'PUT', body?: unkn
 
 export async function GET(req: Request) {
   // Forward GET /api/officials and include incoming headers
-  return forward('/api/officials', 'GET', undefined, req.headers);
+  return forward(req, '/api/officials', 'GET');
 }
 
 export async function POST(req: Request) {
   const body: unknown = await req.json().catch(() => null);
-  return forward('/api/officials', 'POST', body, req.headers);
+  return forward(req, '/api/officials', 'POST', body);
 }
 
 export async function PUT(req: Request) {
   const body: unknown = await req.json().catch(() => null);
-  return forward('/api/officials', 'PUT', body, req.headers);
+  return forward(req, '/api/officials', 'PUT', body);
 }

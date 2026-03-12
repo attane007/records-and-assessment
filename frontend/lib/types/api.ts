@@ -1,6 +1,7 @@
 export type AdminSession = {
   sub: string;
   username: string;
+  accountId: string;
   exp: number;
 };
 

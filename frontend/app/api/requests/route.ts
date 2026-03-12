@@ -14,8 +14,13 @@ async function proxyFetch(path: string, init?: RequestInit) {
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
 }
 
+import { getSessionFromRequest } from '@/lib/session';
+
 export async function GET(req: NextRequest) {
   try {
+    const session = await getSessionFromRequest(req);
+    const accountId = session?.accountId || '';
+
     const url = new URL(req.url);
     const path = `/api/requests${url.search}`;
     // Forward cookies and auth headers
@@ -23,8 +28,8 @@ export async function GET(req: NextRequest) {
       method: 'GET',
       headers: {
         cookie: req.headers.get('cookie') || '',
-        // allow the backend to see the original host if needed
         'x-forwarded-host': req.headers.get('host') || '',
+        'X-Account-ID': accountId,
       },
       // no store so we always fetch fresh
       cache: 'no-store',
@@ -38,9 +43,12 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const session = await getSessionFromRequest(req);
+    const accountId = session?.accountId || '';
+
     const url = new URL(req.url);
-  // Forward the full pathname (including /api) so the backend receives the same path
-  const forwardPath = url.pathname + url.search;
+    // Forward the full pathname (including /api) so the backend receives the same path
+    const forwardPath = url.pathname + url.search;
 
     const body = await req.arrayBuffer();
 
@@ -49,6 +57,7 @@ export async function PUT(req: NextRequest) {
       headers: {
         'content-type': req.headers.get('content-type') || 'application/json',
         cookie: req.headers.get('cookie') || '',
+        'X-Account-ID': accountId,
       },
       body: Buffer.from(body),
     };
@@ -62,8 +71,11 @@ export async function PUT(req: NextRequest) {
 // Support other methods like POST if needed
 export async function POST(req: NextRequest) {
   try {
+    const session = await getSessionFromRequest(req);
+    const accountId = session?.accountId || '';
+
     const url = new URL(req.url);
-  const forwardPath = url.pathname + url.search;
+    const forwardPath = url.pathname + url.search;
     const body = await req.arrayBuffer();
 
     const init: RequestInit = {
@@ -71,6 +83,7 @@ export async function POST(req: NextRequest) {
       headers: {
         'content-type': req.headers.get('content-type') || 'application/json',
         cookie: req.headers.get('cookie') || '',
+        'X-Account-ID': accountId,
       },
       body: Buffer.from(body),
     };
