@@ -71,6 +71,7 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [passwordMessage, setPasswordMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const showPasswordSection = false;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -157,7 +158,7 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
   );
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+    <div className={`grid grid-cols-1 gap-6 items-stretch ${showPasswordSection ? "xl:grid-cols-2" : ""}`}>
       {/* ─── Officials Info ─── */}
       <div className="flex flex-col h-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg overflow-hidden">
         <div className="flex items-center gap-4 px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/10">
@@ -223,75 +224,76 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
         </form>
       </div>
 
-      {/* ─── Change Password ─── */}
-      <div className="flex flex-col h-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg overflow-hidden">
-        <div className="flex items-center gap-4 px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/10">
-          <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">ความปลอดภัย</h2>
-            <p className="text-xs text-slate-500">รหัสผ่านสำหรับเข้าสู่ระบบ</p>
-          </div>
-        </div>
-
-        <div className="flex-1 p-8 flex flex-col">
-          {!showPasswordForm ? (
-            <div className="flex-1 flex flex-col items-center justify-center py-6 gap-6">
-              <div className="w-16 h-16 rounded-[1.5rem] bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-              </div>
-              <div className="text-center space-y-1">
-                <h3 className="text-xl font-bold">เปลี่ยนรหัสผ่าน</h3>
-                <p className="text-sm text-slate-400">แนะนำให้เปลี่ยนสม่ำเสมอ</p>
-              </div>
-              {passwordMessage && <div className="w-full text-center"><AlertMessage msg={passwordMessage} /></div>}
-              <button
-                onClick={() => setShowPasswordForm(true)}
-                className="px-8 py-3.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors text-sm shadow-md"
-              >
-                เริ่มแก้ไขรหัสผ่าน
-              </button>
+      {showPasswordSection && (
+        <div className="flex flex-col h-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg overflow-hidden">
+          <div className="flex items-center gap-4 px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/10">
+            <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
             </div>
-          ) : (
-            <form onSubmit={handlePasswordSubmit} className="flex-1 flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className={labelClass}>รหัสผ่านเดิม</label>
-                  <input type="password" name="currentPassword" value={passwordData.currentPassword} onChange={handlePasswordInputChange} className={inputClass} required />
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">ความปลอดภัย</h2>
+              <p className="text-xs text-slate-500">รหัสผ่านสำหรับเข้าสู่ระบบ</p>
+            </div>
+          </div>
+
+          <div className="flex-1 p-8 flex flex-col">
+            {!showPasswordForm ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-6 gap-6">
+                <div className="w-16 h-16 rounded-[1.5rem] bg-orange-50 dark:bg-orange-950/20 flex items-center justify-center">
+                  <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                    <label className={labelClass}>รหัสใหม่</label>
-                    <input type="password" name="newPassword" value={passwordData.newPassword} onChange={handlePasswordInputChange} className={inputClass} required minLength={6} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className={labelClass}>ยืนยันรหัส</label>
-                    <input type="password" name="confirmPassword" value={passwordData.confirmPassword} onChange={handlePasswordInputChange} className={inputClass} required />
-                  </div>
+                <div className="text-center space-y-1">
+                  <h3 className="text-xl font-bold">เปลี่ยนรหัสผ่าน</h3>
+                  <p className="text-sm text-slate-400">แนะนำให้เปลี่ยนสม่ำเสมอ</p>
                 </div>
-                {passwordMessage && <AlertMessage msg={passwordMessage} />}
-              </div>
-              <div className="flex gap-4 pt-8 border-t border-slate-50 dark:border-slate-800">
+                {passwordMessage && <div className="w-full text-center"><AlertMessage msg={passwordMessage} /></div>}
                 <button
-                  type="submit"
-                  disabled={isPasswordLoading || !hasPasswordChanges}
-                  className="flex-1 py-3.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors text-sm"
+                  onClick={() => setShowPasswordForm(true)}
+                  className="px-8 py-3.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors text-sm shadow-md"
                 >
-                  อัปเดตทันที
-                </button>
-                <button type="button" onClick={() => setShowPasswordForm(false)} className="px-6 py-3.5 text-xs text-red-600 font-bold hover:bg-red-50 rounded-xl">
-                  ยกเลิก
+                  เริ่มแก้ไขรหัสผ่าน
                 </button>
               </div>
-            </form>
-          )}
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className={labelClass}>รหัสผ่านเดิม</label>
+                    <input type="password" name="currentPassword" value={passwordData.currentPassword} onChange={handlePasswordInputChange} className={inputClass} required />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-1">
+                      <label className={labelClass}>รหัสใหม่</label>
+                      <input type="password" name="newPassword" value={passwordData.newPassword} onChange={handlePasswordInputChange} className={inputClass} required minLength={6} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className={labelClass}>ยืนยันรหัส</label>
+                      <input type="password" name="confirmPassword" value={passwordData.confirmPassword} onChange={handlePasswordInputChange} className={inputClass} required />
+                    </div>
+                  </div>
+                  {passwordMessage && <AlertMessage msg={passwordMessage} />}
+                </div>
+                <div className="flex gap-4 pt-8 border-t border-slate-50 dark:border-slate-800">
+                  <button
+                    type="submit"
+                    disabled={isPasswordLoading || !hasPasswordChanges}
+                    className="flex-1 py-3.5 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors text-sm"
+                  >
+                    อัปเดตทันที
+                  </button>
+                  <button type="button" onClick={() => setShowPasswordForm(false)} className="px-6 py-3.5 text-xs text-red-600 font-bold hover:bg-red-50 rounded-xl">
+                    ยกเลิก
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

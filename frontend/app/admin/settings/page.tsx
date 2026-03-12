@@ -45,7 +45,7 @@ export default async function SettingsPage() {
               ชื่อนายทะเบียนและผู้อำนวยการ
             </h1>
             <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-              จัดการข้อมูลเจ้าหน้าที่สำหรับเอกสารทางการ และตั้งค่าความปลอดภัย
+              จัดการข้อมูลเจ้าหน้าที่สำหรับเอกสารทางการ
             </p>
           </div>
 
