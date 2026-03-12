@@ -434,6 +434,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 				"id":            record.RequestID.Hex(),
 				"prefix":        request.Prefix,
 				"name":          request.Name,
+				"id_card":       request.IDCard,
+				"date_of_birth": request.DateOfBirth,
 				"document_type": request.DocumentType,
 				"purpose":       request.Purpose,
 			},

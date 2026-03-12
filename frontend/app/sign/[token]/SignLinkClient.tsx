@@ -19,14 +19,24 @@ function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
 }
 
 function isSignLinkInfoResponse(value: unknown): value is SignLinkInfoResponse {
+  if (!isRecord(value) || !isRecord(value.request)) {
+    return false;
+  }
+
+  const request = value.request;
   return (
-    isRecord(value) &&
     typeof value.role === "string" &&
     typeof value.request_id === "string" &&
     typeof value.expires_at === "string" &&
     typeof value.revoked === "boolean" &&
     typeof value.active === "boolean" &&
-    isRecord(value.request)
+    typeof request.id === "string" &&
+    typeof request.prefix === "string" &&
+    typeof request.name === "string" &&
+    typeof request.id_card === "string" &&
+    typeof request.date_of_birth === "string" &&
+    typeof request.document_type === "string" &&
+    typeof request.purpose === "string"
   );
 }
 
@@ -40,6 +50,21 @@ function isCreateSignSessionResponse(value: unknown): value is CreateSignSession
     typeof value.request_id === "string" &&
     typeof value.role === "string"
   );
+}
+
+function formatThaiDateDisplay(value: string) {
+  if (!value) return "-";
+
+  const parsed = new Date(value.includes("T") ? value : `${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleDateString("th-TH", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function SignLinkClient({ token }: { token: string }) {
@@ -154,7 +179,11 @@ export default function SignLinkClient({ token }: { token: string }) {
     <main className="mx-auto min-h-screen max-w-2xl px-4 py-8">
       <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
         <div>บทบาทผู้ลงนาม: {info.role === "registrar" ? "นายทะเบียน" : "ผู้อำนวยการ"}</div>
-        <div>คำร้อง: {info.request.prefix} {info.request.name} ({info.request.document_type})</div>
+        <div>ผู้ขอ: {info.request.prefix} {info.request.name}</div>
+        <div>เลขบัตรประชาชน: {info.request.id_card || "-"}</div>
+        <div>วันเกิด: {formatThaiDateDisplay(info.request.date_of_birth)}</div>
+        <div>ประเภทเอกสาร: {info.request.document_type}</div>
+        <div>วัตถุประสงค์: {info.request.purpose}</div>
       </div>
 
       <section className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

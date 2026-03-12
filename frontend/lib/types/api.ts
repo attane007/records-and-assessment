@@ -115,6 +115,8 @@ export type SignLinkInfoResponse = {
     id: string;
     prefix: string;
     name: string;
+    id_card: string;
+    date_of_birth: string;
     document_type: string;
     purpose: string;
   };
