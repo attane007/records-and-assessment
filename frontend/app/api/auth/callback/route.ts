@@ -67,10 +67,12 @@ export async function GET(request: Request) {
 
         const profileData = await profileResponse.json();
 
-        // Krufame Auth Profile usually returns `{ id, email, username, name }` or similar.
-        // We will use standard fields. Map OIDC `id` or `sub` to AccountID.
-        const accountId = profileData.id || profileData.sub || profileData.email;
-        const username = profileData.username || profileData.name || profileData.email;
+        // Some providers return profile fields at root, others wrap them in `{ user: { ... } }`.
+        const profile = profileData?.user ?? profileData;
+
+        // Map OIDC-compatible fields to account/session fields.
+        const accountId = profile?.id ?? profile?.sub ?? profile?.account_id ?? profile?.accountId ?? profile?.email;
+        const username = profile?.username ?? profile?.name ?? profile?.email ?? accountId;
 
         if (!accountId) {
             console.error("No recognizable ID field in profile:", profileData);
