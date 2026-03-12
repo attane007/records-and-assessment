@@ -1,13 +1,9 @@
 import { NextResponse, NextRequest } from "next/server";
-import { getSessionFromRequest } from "@/lib/session";
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSessionFromRequest(req);
-    const accountId = session?.accountId || '';
-
     const body = await req.arrayBuffer();
     const host = req.headers.get("host") || "";
     const proto = req.headers.get("x-forwarded-proto") || "http";
@@ -19,7 +15,6 @@ export async function POST(req: NextRequest) {
         cookie: req.headers.get("cookie") || "",
         "x-forwarded-host": host,
         "x-forwarded-proto": proto,
-        "X-Account-ID": accountId,
       },
       body: Buffer.from(body),
     });

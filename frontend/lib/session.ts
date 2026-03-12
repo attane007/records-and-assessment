@@ -6,7 +6,14 @@ import { cookies } from "next/headers";
 import { createHmac } from "crypto";
 import type { AdminSession } from "@/lib/types/api";
 
-export type SessionPayload = AdminSession;
+type SignedPayload = {
+  exp: number;
+};
+
+export type SessionPayload = AdminSession & {
+  accessToken?: string;
+  tokenType?: string;
+};
 
 type CookieStore = {
   get: (name: string) => { value: string } | undefined;
@@ -51,6 +58,10 @@ async function getCookieStore(): Promise<CookieStore> {
 }
 
 export async function createSessionToken(payload: SessionPayload): Promise<string> {
+  return createSignedToken(payload);
+}
+
+export async function createSignedToken<T extends SignedPayload>(payload: T): Promise<string> {
   const header = { alg: "HS256", typ: "JWT" };
   const headerB64 = base64url(JSON.stringify(header));
   const payloadB64 = base64url(JSON.stringify(payload));
@@ -60,6 +71,10 @@ export async function createSessionToken(payload: SessionPayload): Promise<strin
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+  return verifySignedToken<SessionPayload>(token);
+}
+
+export async function verifySignedToken<T extends SignedPayload>(token: string): Promise<T | null> {
   try {
     const [h, p, s] = token.split(".");
     if (!h || !p || !s) return null;
@@ -71,7 +86,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     let ok = 0;
     for (let i = 0; i < expected.length; i++) ok |= (expected[i] ?? 0) ^ (provided[i] ?? 0);
     if (ok !== 0) return null;
-    const payload = JSON.parse(Buffer.from(b64urlToBytes(p)).toString("utf8")) as SessionPayload;
+    const payload = JSON.parse(Buffer.from(b64urlToBytes(p)).toString("utf8")) as T;
     if (typeof payload.exp !== "number" || Date.now() / 1000 >= payload.exp) return null;
     return payload;
   } catch {

@@ -7,7 +7,9 @@ import { getSessionFromRequest } from '@/lib/session';
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSessionFromRequest(req);
-    const accountId = session?.accountId || '';
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
 
     const { id } = await context.params;
     const url = `${backendUrl}/api/pdf/${encodeURIComponent(id)}`;
@@ -16,7 +18,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       method: 'GET',
       headers: {
         cookie: req.headers.get('cookie') || '',
-        'X-Account-ID': accountId,
+        Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
       },
     });
 

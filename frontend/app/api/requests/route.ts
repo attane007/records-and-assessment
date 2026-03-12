@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { getSessionFromRequest } from '@/lib/session';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
@@ -14,12 +15,18 @@ async function proxyFetch(path: string, init?: RequestInit) {
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
 }
 
-import { getSessionFromRequest } from '@/lib/session';
+function buildAuthorizationHeader(tokenType: string | undefined, accessToken: string) {
+  const normalizedType = tokenType && tokenType.trim() ? tokenType : 'Bearer';
+  return `${normalizedType} ${accessToken}`;
+}
 
 export async function GET(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    const accountId = session?.accountId || '';
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
 
     const url = new URL(req.url);
     const path = `/api/requests${url.search}`;
@@ -29,7 +36,7 @@ export async function GET(req: NextRequest) {
       headers: {
         cookie: req.headers.get('cookie') || '',
         'x-forwarded-host': req.headers.get('host') || '',
-        'X-Account-ID': accountId,
+        Authorization: authorization,
       },
       // no store so we always fetch fresh
       cache: 'no-store',
@@ -44,7 +51,10 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    const accountId = session?.accountId || '';
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
 
     const url = new URL(req.url);
     // Forward the full pathname (including /api) so the backend receives the same path
@@ -57,7 +67,7 @@ export async function PUT(req: NextRequest) {
       headers: {
         'content-type': req.headers.get('content-type') || 'application/json',
         cookie: req.headers.get('cookie') || '',
-        'X-Account-ID': accountId,
+        Authorization: authorization,
       },
       body: Buffer.from(body),
     };
@@ -72,7 +82,10 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    const accountId = session?.accountId || '';
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+    const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
 
     const url = new URL(req.url);
     const forwardPath = url.pathname + url.search;
@@ -83,7 +96,7 @@ export async function POST(req: NextRequest) {
       headers: {
         'content-type': req.headers.get('content-type') || 'application/json',
         cookie: req.headers.get('cookie') || '',
-        'X-Account-ID': accountId,
+        Authorization: authorization,
       },
       body: Buffer.from(body),
     };

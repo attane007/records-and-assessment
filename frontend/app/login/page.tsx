@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -10,10 +11,16 @@ function LoginContent() {
   const errorMessages: Record<string, string> = {
     auth_failed: "การยืนยันตัวตนล้มเหลว",
     no_code: "ไม่พบรหัสยืนยันตัวตน",
+    missing_state: "ไม่พบข้อมูล state สำหรับยืนยันความปลอดภัย",
+    invalid_state: "ข้อมูล state ไม่ถูกต้องหรือหมดอายุ",
+    state_mismatch: "state ไม่ตรงกัน ระบบอาจถูกเรียกกลับผิดบริบท",
+    invalid_id_token: "id_token ไม่ถูกต้อง",
+    nonce_mismatch: "nonce ไม่ตรงกัน ไม่สามารถยืนยันตัวตนได้",
     config_error: "ระบบยังไม่ได้ตั้งค่า OIDC",
     token_exchange_failed: "ไม่สามารถแลกเปลี่ยน Token ได้",
     profile_fetch_failed: "ไม่สามารถดึงข้อมูลโปรไฟล์ได้",
     invalid_profile: "รูปแบบข้อมูลโปรไฟล์ไม่ถูกต้อง",
+    session_token_missing: "ไม่พบ access token ใน session กรุณาเข้าสู่ระบบใหม่",
     auth_exception: "เกิดข้อผิดพลาดในระบบเข้าสู่ระบบ"
   };
 
@@ -51,7 +58,7 @@ function LoginContent() {
         )}
 
         <div className="mt-6">
-          <a
+          <Link
             href="/api/auth/oidc"
             className="group relative w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-6 py-3.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300 overflow-hidden"
           >
@@ -60,7 +67,7 @@ function LoginContent() {
               <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12c0-5.523-4.477-10-10-10z" />
             </svg>
             <span className="relative z-10 tracking-wide">เข้าสู่ระบบด้วย Krufame Auth</span>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

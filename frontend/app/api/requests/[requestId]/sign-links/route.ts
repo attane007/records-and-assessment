@@ -9,7 +9,7 @@ export async function POST(
 ) {
   try {
     const session = await getSessionFromRequest(req);
-    if (!session) {
+    if (!session?.accessToken) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
@@ -25,6 +25,7 @@ export async function POST(
         cookie: req.headers.get("cookie") || "",
         "x-forwarded-host": host,
         "x-forwarded-proto": proto,
+        Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
       },
       body: Buffer.from(body),
     });

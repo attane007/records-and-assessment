@@ -208,6 +208,12 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		c.JSON(http.StatusOK, gin.H{"message": "Hello from Go backend with Gin!"})
 	})
 
+	authVerifier, authInitErr := NewAuthVerifierFromEnv()
+	if authInitErr != nil {
+		log.Printf("OIDC auth verifier initialization failed: %v", authInitErr)
+	}
+	requireAuth := RequireBearerAuth(authVerifier)
+
 	// POST /api/submit - accepts student data from the frontend and saves to MongoDB
 	r.POST("/api/submit", func(c *gin.Context) {
 		var payload models.StudentData
@@ -240,8 +246,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// GET /api/stats - return total count, counts by year and by month
-	r.GET("/api/stats", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.GET("/api/stats", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
@@ -282,11 +288,13 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		// For student signatures via submit, usually the link or the process needs to know the account.
-		// Since it's public, maybe they get accountID from the request or URL, but here we require
-		// it to be sent in the header or payload, or we derive it from the sign link.
-		// Wait, this route is for the public form right after submission usually.
-		accountID := c.GetHeader("X-Account-ID")
+		var rawRequest models.StudentData
+		if err := mongoColl.FindOne(ctx, bson.M{"_id": objectID}).Decode(&rawRequest); err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+			return
+		}
+
+		accountID := strings.TrimSpace(rawRequest.AccountID)
 		if accountID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
 			return
@@ -313,8 +321,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// POST /api/requests/:id/sign-links - create official sign link from admin workflow
-	r.POST("/api/requests/:id/sign-links", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.POST("/api/requests/:id/sign-links", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
@@ -726,8 +734,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// GET /api/requests - return paginated list of student requests
-	r.GET("/api/requests", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.GET("/api/requests", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
@@ -766,14 +774,10 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// GET /api/pdf/:id - generate PDF for a specific request
-	r.GET("/api/pdf/:id", func(c *gin.Context) {
-		accountID := c.Query("account_id")
+	r.GET("/api/pdf/:id", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
-			// fallback to header for auth users viewing PDFs
-			accountID = c.GetHeader("X-Account-ID")
-		}
-		if accountID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
 		}
 
@@ -821,8 +825,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// PUT /api/requests/:id/status - update request status
-	r.PUT("/api/requests/:id/status", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.PUT("/api/requests/:id/status", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
@@ -859,13 +863,10 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// GET /api/officials - get current officials data
-	r.GET("/api/officials", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.GET("/api/officials", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
-			accountID = c.Query("account_id") // allow public view if needed for some flows
-		}
-		if accountID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "missing account id"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
 		}
 
@@ -888,8 +889,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// POST /api/officials - update officials data
-	r.POST("/api/officials", func(c *gin.Context) {
-		accountID := c.GetHeader("X-Account-ID")
+	r.POST("/api/officials", requireAuth, func(c *gin.Context) {
+		accountID := accountIDFromContext(c)
 		if accountID == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing account id"})
 			return
@@ -959,7 +960,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	// POST /api/admin/change-password - change admin password
-	r.POST("/api/admin/change-password", func(c *gin.Context) {
+	r.POST("/api/admin/change-password", requireAuth, func(c *gin.Context) {
 		var payload models.ChangePasswordRequest
 		if err := c.ShouldBindJSON(&payload); err != nil {
 			// try to translate validation errors into readable messages
@@ -972,10 +973,10 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			return
 		}
 
-		// For now, we'll use the default admin username from environment or token
+		// Use username from verified token claims if present.
 		defaultUsername := "admin"
-		if envUser := c.Request.Header.Get("X-Account-ID"); envUser != "" {
-			defaultUsername = envUser
+		if claimUser := usernameFromContext(c); claimUser != "" {
+			defaultUsername = claimUser
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

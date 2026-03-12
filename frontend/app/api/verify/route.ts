@@ -13,13 +13,8 @@ async function proxyFetch(path: string, init?: RequestInit) {
     return new NextResponse(Buffer.from(body), { status: res.status, headers });
 }
 
-import { getSessionFromRequest } from '@/lib/session';
-
 export async function GET(req: NextRequest) {
     try {
-        const session = await getSessionFromRequest(req);
-        const accountId = session?.accountId || '';
-
         const url = new URL(req.url);
         const path = `/api/verify${url.search}`;
         const init: RequestInit = {
@@ -27,7 +22,6 @@ export async function GET(req: NextRequest) {
             headers: {
                 cookie: req.headers.get('cookie') || '',
                 'x-forwarded-host': req.headers.get('host') || '',
-                'X-Account-ID': accountId,
             },
             cache: 'no-store',
         };

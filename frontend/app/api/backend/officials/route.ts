@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/session';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+const BACKEND_URL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
 async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT', body?: unknown) {
   const session = await getSessionFromRequest(req);
-  const accountId = session?.accountId || '';
+  if (!session?.accessToken) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
 
   const url = `${BACKEND_URL}${path}`;
   const headers = new Headers({
     'Content-Type': 'application/json',
-    'X-Account-ID': accountId,
+    Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
   });
 
   const cookie = req.headers.get('cookie') || '';

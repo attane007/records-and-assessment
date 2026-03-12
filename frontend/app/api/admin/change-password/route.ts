@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   try {
     // Check if user is authenticated
     const session = await getSessionFromRequest(req);
-    if (!session) {
+    if (!session?.accessToken) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
@@ -40,13 +40,12 @@ export async function POST(req: Request) {
     }
 
     // Send request to backend
-    const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const backendURL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
     const response = await fetch(`${backendURL}/api/admin/change-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Account-ID": session.accountId || "",
-        "X-Admin-User": session.username || "admin",
+        Authorization: `${session.tokenType || "Bearer"} ${session.accessToken}`,
       },
       body: JSON.stringify({
         current_password: currentPassword,

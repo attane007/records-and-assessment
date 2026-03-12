@@ -8,13 +8,15 @@ async function handleLogout() {
     // relying on an incoming Host header that may be set to localhost by proxies.
     const isProd = process.env.NODE_ENV === "production";
     const cookie = `session=; Path=/; Max-Age=0; SameSite=Strict; HttpOnly${isProd ? "; Secure" : ""}`;
+    const txCookie = `oidc_tx=; Path=/; Max-Age=0; SameSite=Strict; HttpOnly${isProd ? "; Secure" : ""}`;
+    const headers = new Headers();
+    headers.set("Location", "/");
+    headers.append("Set-Cookie", cookie);
+    headers.append("Set-Cookie", txCookie);
 
     return new Response(null, {
       status: 303,
-      headers: {
-        Location: "/",
-        "Set-Cookie": cookie,
-      },
+      headers,
     });
   } catch (err) {
     // log so stacktrace appears in server logs

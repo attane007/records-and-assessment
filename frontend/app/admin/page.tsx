@@ -7,6 +7,7 @@ import "server-only";
 export default async function AdminPage() {
   const session = await getSessionFromCookies();
   if (!session) redirect("/login");
+  if (!session.accessToken) redirect("/login?error=session_token_missing");
 
   // Fetch dashboard stats from backend
   const backendURL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
@@ -15,7 +16,7 @@ export default async function AdminPage() {
     const res = await fetch(`${backendURL}/api/stats`, {
       cache: "no-store",
       headers: {
-        "X-Account-ID": session.accountId,
+        Authorization: `${session.tokenType || "Bearer"} ${session.accessToken}`,
       }
     });
     if (res.ok) stats = await res.json();

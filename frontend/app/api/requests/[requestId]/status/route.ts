@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { getSessionFromRequest } from '@/lib/session';
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
@@ -15,6 +16,11 @@ async function proxyFetch(path: string, init?: RequestInit) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const session = await getSessionFromRequest(req);
+    if (!session?.accessToken) {
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    }
+
     const url = new URL(req.url);
     // forward full pathname (includes /api/requests/<id>/status) and query
     const forwardPath = url.pathname + url.search;
@@ -27,6 +33,7 @@ export async function PUT(req: NextRequest) {
         'content-type': req.headers.get('content-type') || 'application/json',
         cookie: req.headers.get('cookie') || '',
         'x-forwarded-host': req.headers.get('host') || '',
+        Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
       },
       body: Buffer.from(body),
     };
