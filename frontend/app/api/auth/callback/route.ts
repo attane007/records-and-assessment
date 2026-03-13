@@ -1,14 +1,34 @@
 import { NextResponse } from 'next/server';
 import { createSessionToken, verifySignedToken } from '@/lib/session';
 
+function resolveFrontendOrigin(request: Request): string {
+    const configured = process.env.FRONTEND_URL?.trim();
+    if (configured) {
+        return configured.replace(/\/$/, '');
+    }
+
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const forwardedHost =
+        request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() ||
+        request.headers.get('host')?.trim();
+
+    if (forwardedHost) {
+        const proto = forwardedProto || 'https';
+        return `${proto}://${forwardedHost}`;
+    }
+
+    return new URL(request.url).origin;
+}
+
 export async function GET(request: Request) {
+    const frontendOrigin = resolveFrontendOrigin(request);
     const { searchParams } = new URL(request.url);
     // The backend drives the full OIDC flow and redirects here with the signed
     // session JWT as a query parameter after a successful exchange.
     const token = searchParams.get('token');
 
     const fail = (reason: string) =>
-        NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(reason)}`, request.url));
+        NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(reason)}`, frontendOrigin));
 
     if (!token) return fail('missing_token');
 
@@ -32,7 +52,7 @@ export async function GET(request: Request) {
     const sessionToken = await createSessionToken(sessionPayload);
     const maxAge = Math.max(0, claims.exp - Math.floor(Date.now() / 1000));
 
-    const response = NextResponse.redirect(new URL('/admin', request.url));
+    const response = NextResponse.redirect(new URL('/admin', frontendOrigin));
     response.cookies.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
