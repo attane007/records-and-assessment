@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { LogIn } from "lucide-react";
 
 export default function LandingPage() {
   return (
@@ -25,9 +26,10 @@ export default function LandingPage() {
             <div className="flex gap-4">
               <Link
                 href="/admin"
-                className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+                className="group relative inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-slate-100 dark:to-white dark:text-slate-900 rounded-xl shadow-lg shadow-slate-200/50 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
-                เข้าสู่ระบบ
+                <LogIn className="w-4 h-4 transition-transform group-hover:rotate-12" />
+                <span>เข้าสู่ระบบ</span>
               </Link>
             </div>
           </div>

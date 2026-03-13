@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, ShieldAlert, Clock, User, Globe, FileText, ArrowLeft, Search } from "lucide-react";
 import Link from "next/link";
 
@@ -29,6 +29,7 @@ type VerifyResponse = {
 };
 
 export default function VerifyClient() {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const [hashInput, setHashInput] = useState("");
     const [data, setData] = useState<VerifyResponse | null>(null);
@@ -87,10 +88,13 @@ export default function VerifyClient() {
     return (
         <main className="min-h-screen bg-slate-50 px-4 py-12 dark:bg-slate-950">
             <div className="mx-auto max-w-2xl">
-                <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-cyan-600">
+                <button 
+                    onClick={() => router.back()}
+                    className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-cyan-600 transition-colors cursor-pointer"
+                >
                     <ArrowLeft className="h-4 w-4" />
-                    กลับหน้าหลัก
-                </Link>
+                    ย้อนกลับ
+                </button>
 
                 <div className="mb-8 overflow-hidden rounded-3xl bg-white shadow-xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div className="bg-gradient-to-r from-cyan-600 to-blue-700 p-8 text-center text-white">
