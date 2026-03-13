@@ -2,6 +2,29 @@ import { NextResponse, NextRequest } from 'next/server';
 
 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
+const strippedResponseHeaderNames = new Set([
+  'connection',
+  'content-encoding',
+  'content-length',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+function buildProxyResponseHeaders(source: Headers) {
+  const headers = new Headers();
+  source.forEach((value, key) => {
+    if (!strippedResponseHeaderNames.has(key.toLowerCase())) {
+      headers.set(key, value);
+    }
+  });
+  return headers;
+}
+
 import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -25,8 +48,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     if (!res.ok) return NextResponse.json({ error: 'failed to generate pdf' }, { status: res.status });
 
     const array = await res.arrayBuffer();
-    const headers = new Headers();
-    res.headers.forEach((v, k) => headers.set(k, v));
+    const headers = buildProxyResponseHeaders(res.headers);
 
     const response = new NextResponse(Buffer.from(array), { status: res.status, headers });
     

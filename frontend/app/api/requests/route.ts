@@ -3,13 +3,35 @@ import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
+const strippedResponseHeaderNames = new Set([
+  'connection',
+  'content-encoding',
+  'content-length',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
+function buildProxyResponseHeaders(source: Headers) {
+  const headers = new Headers();
+  source.forEach((value, key) => {
+    if (!strippedResponseHeaderNames.has(key.toLowerCase())) {
+      headers.set(key, value);
+    }
+  });
+  return headers;
+}
+
 async function proxyFetch(path: string, init?: RequestInit) {
   const url = `${backendUrl}${path}`;
   const res = await fetch(url, init);
 
   // For non-OK responses, mirror status and body
-  const headers = new Headers();
-  res.headers.forEach((v, k) => headers.set(k, v));
+  const headers = buildProxyResponseHeaders(res.headers);
 
   const body = await res.arrayBuffer();
   return new NextResponse(Buffer.from(body), { status: res.status, headers });
