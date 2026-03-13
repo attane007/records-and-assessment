@@ -21,7 +21,7 @@ export default async function LandingPage() {
                  <Image src="/logo-ppk-512x512-1.ico" alt="Logo" width={24} height={24} className="brightness-0 invert" />
               </div>
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-200 dark:to-white">
-                ระบบ ปพ.1/ปพ.7
+                ระบบขอ ปพ.1/ปพ.7
               </span>
             </div>
             <div className="flex gap-4">
