@@ -135,6 +135,7 @@ func GetStats(ctx context.Context, coll *mongo.Collection, accountID string) (St
 // RequestRecord represents a student request/application document with metadata
 type RequestRecord struct {
 	ID           interface{}              `json:"id" bson:"_id"`
+	AccountID    string                   `json:"account_id" bson:"account_id"`
 	Prefix       string                   `json:"prefix" bson:"prefix"`
 	Name         string                   `json:"name" bson:"name"`
 	DocumentType string                   `json:"document_type" bson:"document_type"`

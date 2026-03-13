@@ -109,22 +109,34 @@ func SendSubmissionNotification(ctx context.Context, payload models.StudentData,
 	return sendRawEmail(ctx, srv, delegate, notifyTo, subject, body)
 }
 
-// SendSubmissionNotificationByRequest sends the same admin notification email
-// but builds content from a persisted request record.
+// SendSubmissionNotificationByRequest sends a notification email to the form owner.
+// The recipient is request.AccountID, which equals the owner's OIDC email in this system.
+// If AccountID is not a valid email address, the function returns an error and no email is sent.
 func SendSubmissionNotificationByRequest(ctx context.Context, request *RequestRecord) error {
 	if request == nil {
 		return fmt.Errorf("request is required")
 	}
 
-	payload := models.StudentData{
-		Prefix:       request.Prefix,
-		Name:         request.Name,
-		DocumentType: request.DocumentType,
-		StudentID:    request.StudentID,
-		Purpose:      request.Purpose,
+	notifyTo := strings.TrimSpace(request.AccountID)
+	if !strings.Contains(notifyTo, "@") {
+		return fmt.Errorf("owner email not available for account: %q", request.AccountID)
 	}
 
-	return SendSubmissionNotification(ctx, payload, request.ID)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	srv, delegate, err := loadDelegatedGmailService(ctx)
+	if err != nil {
+		return err
+	}
+
+	subject := "ได้รับรายการใหม่จากการยื่นเอกสาร"
+	body := fmt.Sprintf("มีคำร้องใหม่ที่ถูกยื่นเข้ามา\n\nID: %v\nชื่อ: %s %s\nเอกสาร: %s\nรหัสนักศึกษา: %s\nวัตถุประสงค์: %s\nเวลาที่ยื่น: %s\n",
+		request.ID, request.Prefix, request.Name, request.DocumentType, request.StudentID, request.Purpose, time.Now().Format(time.RFC1123))
+	return sendRawEmail(ctx, srv, delegate, notifyTo, subject, body)
 }
 
 // SendOfficialSignLink sends a signing URL to one official recipient.
