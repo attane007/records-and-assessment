@@ -231,7 +231,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, schoolName
 	pdf.Ln(3)
 
 	// Add three lines of school address (left-aligned)
-	pdf.SetY(pageMargins.Top + 40)
+	pdf.SetY(pageMargins.Top + 35)
 	pdf.SetFont(thaiFontFamily, "", 14)
 	// Ensure text starts at left printable margin
 	pdf.SetX(pageMargins.Left + 130)
