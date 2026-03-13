@@ -123,11 +123,15 @@ func toOfficialDecision(value string) (models.OfficialDecisionValue, error) {
 }
 
 func buildPublicBaseURL(c *gin.Context) string {
+	if configured := strings.TrimSpace(os.Getenv("FRONTEND_URL")); configured != "" {
+		return strings.TrimRight(configured, "/")
+	}
+
 	if configured := strings.TrimSpace(os.Getenv("SIGN_PUBLIC_BASE_URL")); configured != "" {
 		return strings.TrimRight(configured, "/")
 	}
 
-	proto := c.GetHeader("X-Forwarded-Proto")
+	proto := strings.TrimSpace(strings.Split(c.GetHeader("X-Forwarded-Proto"), ",")[0])
 	if proto == "" {
 		if c.Request.TLS != nil {
 			proto = "https"
@@ -135,9 +139,9 @@ func buildPublicBaseURL(c *gin.Context) string {
 			proto = "http"
 		}
 	}
-	host := c.GetHeader("X-Forwarded-Host")
+	host := strings.TrimSpace(strings.Split(c.GetHeader("X-Forwarded-Host"), ",")[0])
 	if host == "" {
-		host = c.Request.Host
+		host = strings.TrimSpace(c.Request.Host)
 	}
 	if host == "" {
 		host = "localhost:3000"
