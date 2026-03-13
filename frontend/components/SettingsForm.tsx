@@ -161,19 +161,19 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
     <div className={`grid grid-cols-1 gap-6 items-stretch ${showPasswordSection ? "xl:grid-cols-2" : ""}`}>
       {/* ─── Officials Info ─── */}
       <div className="flex flex-col h-full bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-lg overflow-hidden">
-        <div className="flex items-center gap-4 px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/10">
-          <div className="w-10 h-10 rounded-xl bg-violet-600 flex items-center justify-center flex-shrink-0">
+        <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/10">
+          <div className="w-9 h-9 rounded-xl bg-violet-600 flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">ข้อมูลเจ้าหน้าที่</h2>
-            <p className="text-xs text-slate-500">สำหรับปรากฏในเอกสาร PDF</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">ข้อมูลเจ้าหน้าที่</h2>
+            <p className="text-[11px] text-slate-500">สำหรับปรากฏในเอกสาร PDF</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 p-8 flex flex-col justify-between space-y-6">
+        <form onSubmit={handleSubmit} className="flex-1 p-6 flex flex-col justify-between space-y-5">
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-1">

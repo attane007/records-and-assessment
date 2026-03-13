@@ -66,7 +66,7 @@ export default async function SettingsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
       <AdminNavbar session={session} currentPage="settings" publicFormUrl={publicFormUrl} />
 
-      <main className="max-w-6xl mx-auto px-6 py-8 md:py-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 md:py-6">
         <div className="space-y-6">
           {/* Header */}
           <div className="text-center space-y-1 max-w-2xl mx-auto">
@@ -78,11 +78,18 @@ export default async function SettingsPage() {
             </p>
           </div>
 
-          {/* Settings Form (2-column layout) */}
-          <SettingsForm initialData={officials} />
+          {/* Grid Layout for Desktop */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* Left Column: Settings Form (Main Info) */}
+            <div className="lg:col-span-2">
+              <SettingsForm initialData={officials} />
+            </div>
 
-          {/* Form Link Manager */}
-          <FormLinkManager initialFormUrl={publicFormUrl} />
+            {/* Right Column: Form Link Manager */}
+            <div className="lg:col-span-1">
+              <FormLinkManager initialFormUrl={publicFormUrl} />
+            </div>
+          </div>
         </div>
       </main>
     </div>
