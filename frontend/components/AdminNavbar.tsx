@@ -41,6 +41,7 @@ export default function AdminNavbar({ session, currentPage, publicFormUrl }: Adm
   };
 
   return (
+    <>
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 sm:h-20">
@@ -254,17 +255,17 @@ export default function AdminNavbar({ session, currentPage, publicFormUrl }: Adm
               </form>
             </div>
           </div>
-
         </div>
       </div>
-
-      {publicFormUrl && (
-        <QRModal 
-          isOpen={isQRModalOpen} 
-          onClose={() => setIsQRModalOpen(false)} 
-          url={publicFormUrl} 
-        />
-      )}
     </header>
+
+    {publicFormUrl && (
+      <QRModal 
+        isOpen={isQRModalOpen} 
+        onClose={() => setIsQRModalOpen(false)} 
+        url={publicFormUrl || ""} 
+      />
+    )}
+    </>
   );
 }
