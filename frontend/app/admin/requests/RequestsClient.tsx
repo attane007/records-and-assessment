@@ -45,15 +45,55 @@ function isMeResponse(value: unknown): value is MeResponse {
   return isAdminSession(value.session);
 }
 
-function isRequestsResponse(value: unknown): value is RequestsResponse {
-  if (!isRecord(value)) return false;
-  if (!Array.isArray(value.requests)) return false;
-  return (
-    typeof value.total === "number" &&
-    typeof value.page === "number" &&
-    typeof value.limit === "number" &&
-    typeof value.pages === "number"
-  );
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function normalizeRequestId(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (isRecord(value) && typeof value.$oid === "string") return value.$oid;
+  return "";
+}
+
+function normalizeRequestsResponse(value: unknown, fallbackPage: number, fallbackLimit: number): RequestsResponse | null {
+  if (!isRecord(value)) return null;
+
+  const requestsRaw = value.requests;
+  if (!Array.isArray(requestsRaw)) return null;
+
+  const requests = requestsRaw
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const id = normalizeRequestId(item.id ?? item._id);
+      if (!id) return null;
+      return { ...item, id } as RequestRecord;
+    })
+    .filter((item): item is RequestRecord => item !== null);
+
+  const totalRaw = toNumber(value.total);
+  const pageRaw = toNumber(value.page);
+  const limitRaw = toNumber(value.limit);
+  const pagesRaw = toNumber(value.pages);
+
+  const total = totalRaw !== null && totalRaw >= 0 ? Math.floor(totalRaw) : requests.length;
+  const page = pageRaw !== null && pageRaw > 0 ? Math.floor(pageRaw) : fallbackPage;
+  const limit = limitRaw !== null && limitRaw > 0 ? Math.floor(limitRaw) : fallbackLimit;
+  const derivedPages = total > 0 ? Math.ceil(total / limit) : 0;
+  const pages = pagesRaw !== null && pagesRaw >= 0 ? Math.floor(pagesRaw) : derivedPages;
+
+  return {
+    requests,
+    total,
+    page,
+    limit,
+    pages,
+  };
 }
 
 function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
@@ -106,6 +146,7 @@ export default function RequestsClient() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [data, setData] = useState<RequestsResponse>({ requests: [], total: 0, page: 1, limit: 20, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [requestsLoadError, setRequestsLoadError] = useState("");
   const [officialEmails, setOfficialEmails] = useState<{ registrar: string; director: string }>({ registrar: "", director: "" });
   const [publicFormUrl, setPublicFormUrl] = useState("");
   const [linksModalOpen, setLinksModalOpen] = useState(false);
@@ -155,6 +196,7 @@ export default function RequestsClient() {
       if (!session) return;
 
       setLoading(true);
+      setRequestsLoadError("");
       // Read page from client-side search params
       let page = parseInt(pageParam, 10);
       if (Number.isNaN(page) || page < 1) page = 1;
@@ -163,14 +205,26 @@ export default function RequestsClient() {
       // Fetch request data from Next.js server-side proxy
       try {
         const res = await fetch(`/api/requests?page=${page}&limit=${limit}`, { cache: "no-store" });
-        if (res.ok) {
-          const responseData: unknown = await res.json().catch(() => null);
-          if (isRequestsResponse(responseData)) {
-            setData(responseData);
+        const responseData: unknown = await res.json().catch(() => null);
+
+        if (!res.ok) {
+          if (isApiErrorResponse(responseData)) {
+            setRequestsLoadError(responseData.error);
+          } else {
+            setRequestsLoadError("ไม่สามารถโหลดข้อมูลคำร้องได้");
           }
+          return;
+        }
+
+        const normalized = normalizeRequestsResponse(responseData, page, limit);
+        if (normalized) {
+          setData(normalized);
+        } else {
+          setRequestsLoadError("รูปแบบข้อมูลคำร้องจากเซิร์ฟเวอร์ไม่ถูกต้อง");
         }
       } catch (error) {
         console.error("Failed to fetch requests:", error);
+        setRequestsLoadError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
       } finally {
         setLoading(false);
       }
@@ -486,6 +540,11 @@ export default function RequestsClient() {
               แสดงผลลัพธ์ {Math.min((data.page - 1) * data.limit + 1, data.total)}-{Math.min(data.page * data.limit, data.total)} จาก {data.total} รายการ
             </p>
           </div>
+          {requestsLoadError ? (
+            <div className="rounded-xl border border-rose-200/70 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300">
+              {requestsLoadError}
+            </div>
+          ) : null}
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Total Requests Card */}
