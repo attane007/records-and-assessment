@@ -125,9 +125,15 @@ export type SignLinkInfoResponse = {
     prefix: string;
     name: string;
     id_card: string;
+    student_id?: string;
     date_of_birth: string;
     document_type: string;
     purpose: string;
+    class?: string;
+    room?: string;
+    academic_year?: string;
+    father_name?: string;
+    mother_name?: string;
   };
 };
 

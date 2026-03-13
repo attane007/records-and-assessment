@@ -566,9 +566,15 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 				"prefix":        request.Prefix,
 				"name":          request.Name,
 				"id_card":       request.IDCard,
+				"student_id":    request.StudentID,
 				"date_of_birth": request.DateOfBirth,
 				"document_type": request.DocumentType,
 				"purpose":       request.Purpose,
+				"class":         request.Class,
+				"room":          request.Room,
+				"academic_year": request.AcademicYear,
+				"father_name":   request.FatherName,
+				"mother_name":   request.MotherName,
 			},
 		}
 		if validationErr != nil {
