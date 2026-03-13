@@ -59,7 +59,7 @@ function LoginContent() {
 
         <div className="mt-6">
           <Link
-            href="/api/auth/oidc"
+            href="/api/login"
             className="group relative w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-6 py-3.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300 overflow-hidden"
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
