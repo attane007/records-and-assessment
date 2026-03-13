@@ -946,13 +946,14 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		// Try to load official names from DB, fall back to dummy defaults
 		registrarName, directorName, offErr := services.GetOfficialsFromDB(ctx, officialsColl, accountID)
+		schoolName, schoolAddress, _ := services.GetSchoolInfoFromDB(ctx, officialsColl, accountID)
 		if offErr != nil || registrarName == "" || directorName == "" {
 			// fallback to env/defaults
 			registrarName, directorName = services.GetOfficials()
 		}
 
 		// Generate PDF via service (pass official names and base URL for verification QR)
-		pdfBytes, err := services.GeneratePDF(request, registrarName, directorName, buildPublicBaseURL(c))
+		pdfBytes, err := services.GeneratePDF(request, registrarName, directorName, schoolName, schoolAddress, buildPublicBaseURL(c))
 		if err != nil {
 			log.Printf("pdf generation error for id %s: %v", idStr, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate PDF"})
@@ -1018,6 +1019,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 		registrarName, directorName, err := services.GetOfficialsFromDB(ctx, officialsColl, accountID)
 		registrarEmail, directorEmail, _ := services.GetOfficialEmailsFromDB(ctx, officialsColl, accountID)
+		schoolName, schoolAddress, _ := services.GetSchoolInfoFromDB(ctx, officialsColl, accountID)
 		if err != nil || (registrarName == "" && directorName == "") {
 			// Return default values if no data found
 			registrarName, directorName = services.GetOfficials()
@@ -1028,6 +1030,8 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 			"director_name":   directorName,
 			"registrar_email": registrarEmail,
 			"director_email":  directorEmail,
+			"school_name":     schoolName,
+			"school_address":  schoolAddress,
 		})
 	})
 
@@ -1053,7 +1057,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err := services.SaveOfficialsToDB(ctx, officialsColl, accountID, payload.RegistrarName, payload.DirectorName, payload.RegistrarEmail, payload.DirectorEmail)
+		err := services.SaveOfficialsToDB(ctx, officialsColl, accountID, payload.RegistrarName, payload.DirectorName, payload.RegistrarEmail, payload.DirectorEmail, payload.SchoolName, payload.SchoolAddress)
 		if err != nil {
 			log.Printf("Error saving officials: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save officials data"})

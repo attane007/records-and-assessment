@@ -7,4 +7,6 @@ type Official struct {
 	DirectorName   string `bson:"director_name" json:"director_name"`
 	RegistrarEmail string `bson:"registrar_email" json:"registrar_email"`
 	DirectorEmail  string `bson:"director_email" json:"director_email"`
+	SchoolName     string `bson:"school_name" json:"school_name"`
+	SchoolAddress  string `bson:"school_address" json:"school_address"`
 }

@@ -15,6 +15,12 @@ import (
 	"github.com/skip2/go-qrcode"
 )
 
+const (
+	defaultSchoolName         = "โรงเรียนโพนงามพิทยานุกูล"
+	defaultSchoolAddressLine1 = "ต. โพนงาม  อ. โกสุมพิสัย"
+	defaultSchoolAddressLine2 = "จ.มหาสารคาม 44140"
+)
+
 func decodeSignatureData(raw string) ([]byte, string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -70,11 +76,35 @@ func drawDecisionCircle(pdf *gofpdf.Fpdf, x, y float64, selected bool) {
 	}
 }
 
+func resolveSchoolInfo(schoolName, schoolAddress string) (name string, addressLines []string) {
+	name = strings.TrimSpace(schoolName)
+	if name == "" {
+		name = defaultSchoolName
+	}
+
+	normalizedAddress := strings.ReplaceAll(schoolAddress, "\r\n", "\n")
+	normalizedAddress = strings.ReplaceAll(normalizedAddress, "\r", "\n")
+	if strings.TrimSpace(normalizedAddress) == "" {
+		return name, []string{defaultSchoolAddressLine1, defaultSchoolAddressLine2}
+	}
+	normalizedAddress = strings.TrimRight(normalizedAddress, "\n")
+	addressLines = strings.Split(normalizedAddress, "\n")
+	if len(addressLines) > 3 {
+		addressLines = addressLines[:3]
+	}
+	if len(addressLines) == 0 {
+		return name, []string{defaultSchoolAddressLine1, defaultSchoolAddressLine2}
+	}
+
+	return name, addressLines
+}
+
 // GeneratePDF generates a PDF for the given RequestRecord and returns the PDF bytes.
 // registrarName and directorName are the names to print on signature lines.
 // baseURL is the public URL used to build the verification QR code.
-func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL string) ([]byte, error) {
+func GeneratePDF(request *RequestRecord, registrarName, directorName, schoolName, schoolAddress, baseURL string) ([]byte, error) {
 	pdf := gofpdf.New("P", "mm", "A4", "")
+	resolvedSchoolName, schoolAddressLines := resolveSchoolInfo(schoolName, schoolAddress)
 
 	// Page margin variables (left, right, top, bottom)
 	pageMargins := struct {
@@ -201,14 +231,15 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 	pdf.Ln(3)
 
 	// Add three lines of school address (left-aligned)
+	pdf.SetY(pageMargins.Top + 40)
 	pdf.SetFont(thaiFontFamily, "", 14)
 	// Ensure text starts at left printable margin
 	pdf.SetX(pageMargins.Left + 130)
-	pdf.CellFormat(printableW, 6, "โรงเรียนโพนงามพิทยานุกูล", "", 1, "L", false, 0, "")
-	pdf.SetX(pageMargins.Left + 130)
-	pdf.CellFormat(printableW, 6, "ต. โพนงาม  อ. โกสุมพิสัย", "", 1, "L", false, 0, "")
-	pdf.SetX(pageMargins.Left + 130)
-	pdf.CellFormat(printableW, 6, "จ.มหาสารคาม 44140", "", 1, "L", false, 0, "")
+	pdf.CellFormat(printableW, 6, resolvedSchoolName, "", 1, "L", false, 0, "")
+	for _, addressLine := range schoolAddressLines {
+		pdf.SetX(pageMargins.Left + 130)
+		pdf.CellFormat(printableW, 6, addressLine, "", 1, "L", false, 0, "")
+	}
 	pdf.Ln(6)
 
 	pdf.SetY(pageMargins.Top + 60)
@@ -241,7 +272,7 @@ func GeneratePDF(request *RequestRecord, registrarName, directorName, baseURL st
 
 	pdf.SetY(pageMargins.Top + 77)
 	pdf.SetX(pageMargins.Left)
-	pdf.CellFormat(printableW, 6, "เรียน   ผู้อำนวยการโรงเรียนโพนงามพิทยานุกูล", "", 1, "L", false, 0, "")
+	pdf.CellFormat(printableW, 6, fmt.Sprintf("เรียน   ผู้อำนวยการ%s", resolvedSchoolName), "", 1, "L", false, 0, "")
 	pdf.Ln(6)
 
 	pdf.SetY(pageMargins.Top + 88)

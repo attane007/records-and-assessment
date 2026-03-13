@@ -9,6 +9,8 @@ interface SettingsFormProps {
     director_name: string;
     registrar_email: string;
     director_email: string;
+    school_name: string;
+    school_address: string;
   };
 }
 
@@ -17,6 +19,8 @@ interface FormData {
   director_name: string;
   registrar_email: string;
   director_email: string;
+  school_name: string;
+  school_address: string;
 }
 
 interface PasswordFormData {
@@ -34,6 +38,13 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>(initialData);
 
+  const normalizeSchoolAddress = (value: string) => {
+    const normalized = value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = normalized.split("\n");
+    if (lines.length <= 3) return normalized;
+    return lines.slice(0, 3).join("\n");
+  };
+
   useEffect(() => {
     const shouldFetch = !initialData || (!initialData.registrar_name && !initialData.director_name);
     if (!shouldFetch) return;
@@ -49,6 +60,8 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
               director_name: data.director_name || "",
               registrar_email: data.registrar_email || "",
               director_email: data.director_email || "",
+              school_name: data.school_name || "",
+              school_address: data.school_address || "",
             });
           }
         }
@@ -73,9 +86,10 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const showPasswordSection = false;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const nextValue = name === "school_address" ? normalizeSchoolAddress(value) : value;
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
   };
 
   const handlePasswordInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -195,11 +209,27 @@ export default function SettingsForm({ initialData }: SettingsFormProps) {
                 <input type="email" name="director_email" value={formData.director_email} onChange={handleInputChange} className={inputClass} />
               </div>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-1">
+                <label className={labelClass}>ชื่อโรงเรียน</label>
+                <input type="text" name="school_name" value={formData.school_name} onChange={handleInputChange} className={inputClass} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <label className={labelClass}>ที่อยู่โรงเรียน</label>
+                <textarea
+                  name="school_address"
+                  value={formData.school_address}
+                  onChange={handleInputChange}
+                  className={`${inputClass} resize-none h-[92px]`}
+                  rows={3}
+                />
+              </div>
+            </div>
             <div className="flex items-center gap-3 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100 text-xs text-slate-500 font-medium">
               <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>ใช้สำหรับหัวกระดาษและลายเซ็นของเอกสารทางการ</span>
+              <span>ใช้สำหรับหัวกระดาษ ข้อมูลโรงเรียน และลายเซ็นของเอกสารทางการ</span>
             </div>
             {message && <AlertMessage msg={message} />}
           </div>

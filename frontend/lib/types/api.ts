@@ -178,6 +178,8 @@ export type OfficialsPayload = {
   director_name: string;
   registrar_email?: string;
   director_email?: string;
+  school_name?: string;
+  school_address?: string;
 };
 
 export type RequestStatus = "pending" | "completed" | "cancelled";

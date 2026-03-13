@@ -27,7 +27,14 @@ export default async function SettingsPage() {
   const proto = requestHeaders.get("x-forwarded-proto") || (process.env.NODE_ENV === "production" ? "https" : "http");
   const baseUrl = `${proto}://${host}`;
   const apiUrl = `${baseUrl}/api/backend/officials`;
-  let officials = { registrar_name: "", director_name: "", registrar_email: "", director_email: "" };
+  let officials = {
+    registrar_name: "",
+    director_name: "",
+    registrar_email: "",
+    director_email: "",
+    school_name: "",
+    school_address: "",
+  };
   let publicFormUrl = "";
 
   try {
@@ -49,7 +56,15 @@ export default async function SettingsPage() {
     ]);
 
     if (officialsRes.ok) {
-      officials = await officialsRes.json();
+      const payload = await officialsRes.json();
+      officials = {
+        registrar_name: payload?.registrar_name || "",
+        director_name: payload?.director_name || "",
+        registrar_email: payload?.registrar_email || "",
+        director_email: payload?.director_email || "",
+        school_name: payload?.school_name || "",
+        school_address: payload?.school_address || "",
+      };
     } else {
       console.error("Failed to fetch officials: response status", officialsRes.status);
     }
