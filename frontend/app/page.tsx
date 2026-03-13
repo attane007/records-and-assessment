@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { LogIn } from "lucide-react";
 import { getSessionFromCookies } from "@/lib/session";
+import BrandLogo from "@/components/BrandLogo";
 
 export default async function LandingPage() {
   const session = await getSessionFromCookies();
@@ -16,14 +17,9 @@ export default async function LandingPage() {
       <nav className="sticky top-0 z-50 w-full border-b border-white/20 dark:border-slate-800/50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-indigo-600 rounded-xl flex items-center justify-center p-2 shadow-lg shadow-cyan-500/20">
-                 <Image src="/logo-ppk-512x512-1.ico" alt="Logo" width={24} height={24} className="brightness-0 invert" />
-              </div>
-              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-200 dark:to-white">
-                ระบบขอ ปพ.1/ปพ.7
-              </span>
-            </div>
+            <BrandLogo 
+              href="/"
+            />
             <div className="flex gap-4">
               <Link
                 href="/admin"

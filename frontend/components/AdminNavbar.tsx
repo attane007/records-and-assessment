@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import QRModal from './QRModal';
 import NavButton from './NavButton';
+import BrandLogo from './BrandLogo';
 
 interface AdminNavbarProps {
   session: {
@@ -48,19 +50,7 @@ export default function AdminNavbar({ session, currentPage, publicFormUrl }: Adm
 
           {/* Left: Brand */}
           <div className="flex-1 flex justify-start pr-4">
-            <Link href="/admin" className="flex items-center gap-3 hover:opacity-80 transition-all group shrink-0">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-indigo-600 via-blue-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/20 group-hover:scale-105 group-hover:rotate-3 transition-transform duration-300">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <div className="hidden sm:block">
-                <div className="text-xl font-black bg-gradient-to-r from-slate-900 to-slate-600 dark:from-slate-100 dark:to-slate-400 bg-clip-text text-transparent tracking-tight">
-                  ระบบ ปพ.1
-                </div>
-                <div className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-widest -mt-0.5">Records System</div>
-              </div>
-            </Link>
+            <BrandLogo href="/admin" />
           </div>
 
           {/* Center: Primary Navigation */}

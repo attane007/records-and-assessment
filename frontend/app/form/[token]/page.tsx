@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState, useRef, useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import SignatureModal from "@/components/signature/SignatureModal";
+import BrandLogo from "@/components/BrandLogo";
 import type {
   ApiErrorResponse,
   CreateSignSessionResponse,
@@ -338,17 +339,10 @@ export default function Home() {
       <header className="sticky top-0 z-50 w-full border-b border-slate-200/60 dark:border-slate-700/60 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl">
         <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center">
-                <Image src="/logo-ppk-512x512-1.ico" alt="PPK logo" width={24} height={24} />
-              </div>
-              <div>
-                <div className="text-lg sm:text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
-                  ระบบ ปพ.1/ปพ.7
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 -mt-0.5">คำร้องขอเอกสารนักเรียน</div>
-              </div>
-            </div>
+            <BrandLogo 
+              title="ระบบขอ ปพ.1/ปพ.7"
+              subtitle="คำร้องขอเอกสารนักเรียน"
+            />
 
             <Link
               href="/admin"
