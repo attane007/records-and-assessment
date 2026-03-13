@@ -15,7 +15,7 @@ services:
       PORT: "3000"
       AUTH_SECRET: "${AUTH_SECRET}"
       BACKEND_URL: "${BACKEND_URL:-http://backend:8080}"
-      NEXT_PUBLIC_BACKEND_URL: "${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8080}"
+      NEXT_PUBLIC_BACKEND_URL: "${NEXT_PUBLIC_BACKEND_URL:-http://localhost:${BACKEND_HOST_PORT:-8082}}"
 
   backend:
     build:
@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile
     restart: always
     ports:
-    - "8080:8080"
+    - "${BACKEND_HOST_PORT:-8082}:8080"
     networks:
       - frontend_net
     env_file: ./.env
