@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultSchoolName         = "โรงเรียนโพนงามพิทยานุกูล"
+	defaultSchoolName         = "โรงเรียนบ้านโคกกอก"
 	defaultSchoolAddressLine1 = "ต. โพนงาม  อ. โกสุมพิสัย"
 	defaultSchoolAddressLine2 = "จ.มหาสารคาม 44140"
 )

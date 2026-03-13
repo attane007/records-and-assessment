@@ -14,8 +14,8 @@ import (
 // The caller should attempt a DB lookup first via GetOfficialsFromDB and
 // fall back to this function if DB has no record.
 func GetOfficials() (registrar string, director string) {
-	registrar = "นายทะเบียน (ยังไม่ได้กำหนด)"
-	director = "ผู้อำนวยการ (ยังไม่ได้กำหนด)"
+	registrar = "นายสมชาย ใจดี"
+	director = "นายสมบูรณ์ พูนสุข"
 	return
 }
 
