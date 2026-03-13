@@ -19,6 +19,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: always
+    ports:
+    - "8080:8080"
     networks:
       - frontend_net
     env_file: ./.env
@@ -32,6 +34,12 @@ services:
       GMAIL_SERVICE_ACCOUNT_JSON: "${GMAIL_SERVICE_ACCOUNT_JSON}"
       GMAIL_DELEGATE_EMAIL: "${GMAIL_DELEGATE_EMAIL}"
       NOTIFY_TO: "${NOTIFY_TO}"
+      OIDC_BASE_URL: "${OIDC_BASE_URL}"
+      OIDC_DISCOVERY_URL: "${OIDC_DISCOVERY_URL}"
+      OIDC_CLIENT_ID: "${OIDC_CLIENT_ID}"
+      OIDC_CLIENT_SECRET: "${OIDC_CLIENT_SECRET}"
+      FRONTEND_URL: "${FRONTEND_URL}"
+      BACKEND_PUBLIC_URL: "${BACKEND_PUBLIC_URL}"
 
 networks:
   frontend_net:

@@ -53,7 +53,7 @@ export default function LandingPage() {
                 className="group relative w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-gradient-to-r from-cyan-600 to-indigo-600 rounded-2xl shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
                 <span className="relative z-10 flex items-center gap-2">
-                  เข้าสู่ระบบเพื่อยื่นคำร้อง
+                  เข้าสู่ระบบเพื่อสร้างฟอร์ม
                   <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>

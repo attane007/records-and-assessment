@@ -14,6 +14,11 @@ type Config struct {
 	GOEnv    string
 }
 
+// OIDCClientID, OIDCClientSecret, FrontendURL, and AuthSecret are used by the
+// backend OIDC auth handler. They are exposed on Config for convenience but the
+// handlers also read them directly from os.Getenv.
+// (fields added here for documentation; RegisterRoutes reads env vars directly)
+
 // LoadConfig loads .env (without overwriting existing env vars)
 // and returns the effective config values.
 func LoadConfig() Config {

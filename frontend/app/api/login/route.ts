@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 
-const legacyLoginResponse = {
-  error: "legacy_login_disabled",
-  message: "Use /api/auth/oidc to start sign-in.",
-  loginUrl: "/api/auth/oidc",
-};
-
 export async function GET(request: Request) {
-  return NextResponse.redirect(new URL("/api/auth/oidc", request.url));
+  const backendUrl = (
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "http://localhost:8080"
+  ).replace(/\/$/, "");
+  return NextResponse.redirect(`${backendUrl}/auth/login`);
 }
 
 export async function POST() {
-  return NextResponse.json(legacyLoginResponse, { status: 410 });
+  return NextResponse.json({ error: "use GET /api/login to sign in" }, { status: 405 });
 }

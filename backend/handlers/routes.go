@@ -234,11 +234,14 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		c.JSON(http.StatusOK, gin.H{"message": "Hello from Go backend with Gin!"})
 	})
 
-	authVerifier, authInitErr := NewAuthVerifierFromEnv()
-	if authInitErr != nil {
-		log.Printf("OIDC auth verifier initialization failed: %v", authInitErr)
-	}
-	requireAuth := RequireBearerAuth(authVerifier)
+	authSecret := os.Getenv("AUTH_SECRET")
+	requireAuth := RequireSessionAuth(authSecret)
+
+	// ─── OIDC Auth routes (no auth middleware required) ───────────────────────
+	authHandler := NewAuthHandler()
+	r.GET("/auth/login", authHandler.Login)
+	r.GET("/auth/callback", authHandler.Callback)
+	r.POST("/auth/refresh", authHandler.Refresh)
 
 	r.GET("/api/form-links/current", requireAuth, func(c *gin.Context) {
 		accountID := accountIDFromContext(c)
