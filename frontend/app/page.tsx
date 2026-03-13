@@ -1,10 +1,11 @@
-"use client";
-
 import Link from "next/link";
 import Image from "next/image";
 import { LogIn } from "lucide-react";
+import { getSessionFromCookies } from "@/lib/session";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const session = await getSessionFromCookies();
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 relative overflow-hidden selection:bg-cyan-100 dark:selection:bg-cyan-900/40">
       {/* Background Orbs */}
@@ -29,7 +30,7 @@ export default function LandingPage() {
                 className="group relative inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-slate-100 dark:to-white dark:text-slate-900 rounded-xl shadow-lg shadow-slate-200/50 dark:shadow-none hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
                 <LogIn className="w-4 h-4 transition-transform group-hover:rotate-12" />
-                <span>เข้าสู่ระบบ</span>
+                <span>{session ? "แดชบอร์ด" : "เข้าสู่ระบบ"}</span>
               </Link>
             </div>
           </div>
@@ -51,11 +52,11 @@ export default function LandingPage() {
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                href="/login"
+                href="/admin"
                 className="group relative w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 font-bold text-white transition-all duration-200 bg-gradient-to-r from-cyan-600 to-indigo-600 rounded-2xl shadow-xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
               >
                 <span className="relative z-10 flex items-center gap-2">
-                  เข้าสู่ระบบเพื่อสร้างฟอร์ม
+                  {session ? "ไปที่แดชบอร์ด" : "เข้าสู่ระบบเพื่อสร้างฟอร์ม"}
                   <svg className="w-5 h-5 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                   </svg>
