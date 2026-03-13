@@ -64,7 +64,7 @@ export default function AdminNavbar({ session, currentPage, publicFormUrl }: Adm
           </div>
 
           {/* Center: Primary Navigation */}
-          <nav className="hidden md:flex items-center justify-center">
+          <nav className="hidden md:flex items-center justify-center mx-8">
             <div className="flex items-center gap-1.5 p-1.5 bg-slate-100/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-inner">
               <NavButton
                 href="/admin"
