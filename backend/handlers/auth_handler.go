@@ -248,7 +248,8 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.Redirect(http.StatusFound, redirectURL)
 }
 
-// POST /auth/refresh — issue a fresh session JWT for a still-valid token (sliding session).
+// POST /auth/refresh — issue a fresh session JWT from Authorization bearer token.
+// Supports reclaim for expired access tokens while the absolute session lifetime is still valid.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	secret := authSecret()
 	if secret == "" {
@@ -264,21 +265,41 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	claims, err := services.VerifySessionJWT(secret, bearerToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-		return
+		claims, err = services.VerifySessionJWTAllowExpired(secret, bearerToken)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
+		}
 	}
 
 	const expiresIn = 8 * 3600
-	newToken, err := services.IssueSessionJWT(secret, claims.Sub, claims.Username, claims.AccountID, expiresIn)
+	newToken, err := services.IssueSessionJWTForSession(secret, claims, expiresIn)
 	if err != nil {
+		if strings.Contains(err.Error(), "session expired") {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "session expired"})
+			return
+		}
 		log.Printf("issue refresh jwt: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
+	refreshedClaims, err := services.VerifySessionJWTAllowExpired(secret, newToken)
+	if err != nil {
+		log.Printf("verify refreshed jwt: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	remaining := int(refreshedClaims.Exp - time.Now().Unix())
+	if remaining < 0 {
+		remaining = 0
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"token":      newToken,
-		"expires_in": expiresIn,
+		"expires_in": remaining,
+		"exp":        refreshedClaims.Exp,
 	})
 }
 

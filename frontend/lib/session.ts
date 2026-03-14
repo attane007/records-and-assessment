@@ -14,6 +14,7 @@ export type SessionPayload = AdminSession & {
   accessToken?: string;
   tokenType?: string;
   refreshToken?: string;
+  accessTokenExp?: number;
 };
 
 type CookieStore = {
@@ -21,6 +22,8 @@ type CookieStore = {
 };
 
 const enc = new TextEncoder();
+const REFRESH_TOKEN_THRESHOLD_SECONDS = 5 * 60;
+const DEFAULT_SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 function base64url(input: Uint8Array | string) {
   const bytes = typeof input === "string" ? enc.encode(input) : input;
@@ -38,6 +41,17 @@ function b64urlToBytes(b64url: string) {
 function getSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET || "dev-secret-change-me";
   return enc.encode(secret);
+}
+
+function parsePositiveInt(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function getSessionMaxAgeSeconds(): number {
+  return parsePositiveInt(process.env.SESSION_MAX_AGE_SECONDS) ?? DEFAULT_SESSION_MAX_AGE_SECONDS;
 }
 
 function hmacSHA256(message: string, secret: Uint8Array) {
@@ -95,16 +109,67 @@ export async function verifySignedToken<T extends SignedPayload>(token: string):
   }
 }
 
-const REFRESH_TOKEN_THRESHOLD_SECONDS = 5 * 60; // Refresh if less than 5 minutes remaining
+function getAccessTokenExp(payload: SessionPayload): number {
+  return typeof payload.accessTokenExp === "number" ? payload.accessTokenExp : payload.exp;
+}
+
+async function ensureFreshAccessToken(
+  payload: SessionPayload,
+  forceRefresh = false
+): Promise<SessionPayload | null> {
+  if (!payload.accessToken) return payload;
+
+  const now = Math.floor(Date.now() / 1000);
+  const accessTokenExp = getAccessTokenExp(payload);
+  const timeUntilExpiry = accessTokenExp - now;
+
+  if (!forceRefresh && timeUntilExpiry > REFRESH_TOKEN_THRESHOLD_SECONDS) {
+    return payload;
+  }
+
+  const refreshed = await refreshSessionFromBackend(payload.accessToken);
+  if (refreshed) {
+    const refreshedExp =
+      typeof refreshed.exp === "number" ? refreshed.exp : now + refreshed.expires_in;
+    return {
+      ...payload,
+      accessToken: refreshed.token,
+      accessTokenExp: refreshedExp,
+    };
+  }
+
+  if (forceRefresh || timeUntilExpiry <= 0) {
+    return null;
+  }
+
+  return payload;
+}
+
+export async function forceRefreshSessionAccessToken(
+  payload: SessionPayload
+): Promise<SessionPayload | null> {
+  return ensureFreshAccessToken(payload, true);
+}
 
 export async function updateSessionToken(
   payload: SessionPayload,
   expiresIn?: number
 ): Promise<string> {
-  const newPayload = {
+  const now = Math.floor(Date.now() / 1000);
+  const sessionExp = payload.exp > now ? payload.exp : now + getSessionMaxAgeSeconds();
+  const nextAccessTokenExp = payload.accessToken
+    ? typeof expiresIn === "number" && expiresIn > 0
+      ? now + expiresIn
+      : getAccessTokenExp(payload)
+    : undefined;
+
+  const newPayload: SessionPayload = {
     ...payload,
-    exp: payload.exp || Math.floor(Date.now() / 1000) + (expiresIn || 3600),
+    exp: sessionExp,
   };
+  if (typeof nextAccessTokenExp === "number") {
+    newPayload.accessTokenExp = nextAccessTokenExp;
+  }
   return createSessionToken(newPayload);
 }
 
@@ -112,7 +177,9 @@ export async function getSessionFromCookies(): Promise<SessionPayload | null> {
   const jar = await getCookieStore();
   const token = jar.get("session")?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const session = await verifySessionToken(token);
+  if (!session) return null;
+  return ensureFreshAccessToken(session);
 }
 
 export async function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {
@@ -128,25 +195,14 @@ export async function getSessionFromRequest(req: Request): Promise<SessionPayloa
   let session = await verifySessionToken(decodedToken);
   if (!session) return null;
 
-  // Proactively refresh the backend JWT when it is about to expire.
-  const now = Math.floor(Date.now() / 1000);
-  const timeUntilExpiry = session.exp - now;
-  if (timeUntilExpiry <= REFRESH_TOKEN_THRESHOLD_SECONDS && session.accessToken) {
-    try {
-      const refreshed = await refreshSessionFromBackend(session.accessToken);
-      if (refreshed) {
-        return { ...session, accessToken: refreshed.token, exp: now + refreshed.expires_in };
-      }
-    } catch {
-      // Refresh failed — return the still-valid session as-is.
-    }
-  }
+  session = await ensureFreshAccessToken(session);
+  if (!session) return null;
   return session;
 }
 
 async function refreshSessionFromBackend(
   accessToken: string
-): Promise<{ token: string; expires_in: number } | null> {
+): Promise<{ token: string; expires_in: number; exp?: number } | null> {
   const backendUrl = (
     process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
@@ -159,9 +215,20 @@ async function refreshSessionFromBackend(
       cache: "no-store",
     });
     if (!response.ok) return null;
-    const data = (await response.json()) as { token?: string; expires_in?: number };
+    const data = (await response.json()) as { token?: string; expires_in?: number; exp?: number };
     if (!data.token) return null;
-    return { token: data.token, expires_in: data.expires_in ?? 28800 };
+    const normalizedExp = typeof data.exp === "number" ? data.exp : null;
+    if (normalizedExp !== null) {
+      return {
+        token: data.token,
+        expires_in: data.expires_in ?? 28800,
+        exp: normalizedExp,
+      };
+    }
+    return {
+      token: data.token,
+      expires_in: data.expires_in ?? 28800,
+    };
   } catch {
     return null;
   }

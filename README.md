@@ -141,6 +141,13 @@ records-and-assessment/
 - Password hashing ด้วย bcrypt
 - Session timeout และ refresh mechanism
 
+**Session/Refresh Behavior (ปัจจุบัน)**
+- Frontend เก็บ `session` cookie (httpOnly) แยกอายุจาก access token
+- Access token ถูก refresh อัตโนมัติเมื่อใกล้หมดอายุ และจะ reclaim อัตโนมัติเมื่อหมดอายุแล้ว (retry-once ตอน proxy เจอ `401`)
+- Backend endpoint ที่ใช้คือ `POST /auth/refresh` โดยส่ง `Authorization: Bearer <access_token>`
+- หาก token หมดอายุแต่ยังอยู่ใน session lifetime เดิม ระบบจะออก token ใหม่ให้ได้
+- หาก session หมดอายุรวมแล้ว จะตอบ `401` และต้อง login ใหม่
+
 ### Authorization
 - Role-based access control (Admin, Official)
 - Route protection สำหรับ admin pages
@@ -150,6 +157,9 @@ records-and-assessment/
 - ตรวจสอบเลขประจำตัวประชาชนไทย (13 หลัก + checksum)
 - Input validation ทั้ง client และ server side
 - MongoDB schema validation
+
+### Auth Reclaim Testing
+- Manual checklist สำหรับทดสอบ refresh/reclaim flow ดูที่ `docs/auth-reclaim-manual-checklist.md`
 
 ## 📄 API Documentation
 
@@ -205,6 +215,10 @@ ADMIN_PASSWORD=admin123
 # API
 API_BASE_URL=http://localhost:8090
 PORT=8090
+
+# Session (optional)
+# อายุ session cookie สูงสุด (วินาที) ค่า default = 604800 (7 วัน)
+SESSION_MAX_AGE_SECONDS=604800
 ```
 
 ### MongoDB Collections

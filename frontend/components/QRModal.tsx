@@ -1,5 +1,7 @@
 'use client';
 
+import Image from 'next/image';
+
 interface QRModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,9 +39,11 @@ export default function QRModal({ isOpen, onClose, url }: QRModalProps) {
           </div>
 
           <div className="aspect-square w-full rounded-2xl bg-white p-6 border border-slate-100 dark:border-slate-800 flex items-center justify-center shadow-inner overflow-hidden group">
-             <img 
-               src={`/api/share/qrcode?url=${encodeURIComponent(url)}`} 
+             <Image
+               src={`/api/share/qrcode?url=${encodeURIComponent(url)}`}
                alt="QR Code"
+               width={320}
+               height={320}
                className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal transform transition-transform group-hover:scale-105"
              />
           </div>

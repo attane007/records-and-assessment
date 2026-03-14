@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSessionFromRequest, updateSessionToken } from "@/lib/session";
+import { forceRefreshSessionAccessToken, getSessionFromRequest, updateSessionToken } from "@/lib/session";
 import type { ApiErrorResponse, ChangePasswordRequestBody } from "@/lib/types/api";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,22 +41,36 @@ export async function POST(req: Request) {
 
     // Send request to backend
     const backendURL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
-    const response = await fetch(`${backendURL}/api/admin/change-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `${session.tokenType || "Bearer"} ${session.accessToken}`,
-      },
-      body: JSON.stringify({
-        current_password: currentPassword,
-        new_password: newPassword,
-      }),
+    const requestPayload = JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
     });
+
+    const requestWithSession = (activeSession: typeof session) =>
+      fetch(`${backendURL}/api/admin/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `${activeSession.tokenType || "Bearer"} ${activeSession.accessToken}`,
+        },
+        body: requestPayload,
+      });
+
+    let currentSession = session;
+    let response = await requestWithSession(currentSession);
+
+    if (response.status === 401) {
+      const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+      if (refreshedSession?.accessToken) {
+        currentSession = refreshedSession;
+        response = await requestWithSession(currentSession);
+      }
+    }
 
     const data: unknown = await response.json().catch(() => null);
 
     // Persist session cookie
-    const sessionToken = await updateSessionToken(session);
+    const sessionToken = await updateSessionToken(currentSession);
     const responseObj = response.ok
       ? NextResponse.json({ message: "password changed successfully" })
       : NextResponse.json(
@@ -69,7 +83,7 @@ export async function POST(req: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
     });
 
     return responseObj;

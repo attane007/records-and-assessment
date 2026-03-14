@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import QRModal from './QRModal';
 import NavButton from './NavButton';
 import BrandLogo from './BrandLogo';

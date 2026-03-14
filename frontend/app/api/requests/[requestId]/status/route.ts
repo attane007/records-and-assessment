@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
+import { forceRefreshSessionAccessToken, getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
@@ -49,27 +49,37 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.arrayBuffer();
 
-    const init: RequestInit = {
-      method: 'PUT',
-      headers: {
-        'content-type': req.headers.get('content-type') || 'application/json',
-        cookie: req.headers.get('cookie') || '',
-        'x-forwarded-host': req.headers.get('host') || '',
-        Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
-      },
-      body: Buffer.from(body),
-    };
+    const requestWithSession = (activeSession: typeof session) =>
+      proxyFetch(forwardPath, {
+        method: 'PUT',
+        headers: {
+          'content-type': req.headers.get('content-type') || 'application/json',
+          cookie: req.headers.get('cookie') || '',
+          'x-forwarded-host': req.headers.get('host') || '',
+          Authorization: `${activeSession.tokenType || 'Bearer'} ${activeSession.accessToken}`,
+        },
+        body: Buffer.from(body),
+      });
 
-    const response = await proxyFetch(forwardPath, init);
+    let currentSession = session;
+    let response = await requestWithSession(currentSession);
+
+    if (response.status === 401) {
+      const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+      if (refreshedSession?.accessToken) {
+        currentSession = refreshedSession;
+        response = await requestWithSession(currentSession);
+      }
+    }
     
     // Persist session cookie
-    const sessionToken = await updateSessionToken(session);
+    const sessionToken = await updateSessionToken(currentSession);
     response.cookies.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
     });
 
     return response;

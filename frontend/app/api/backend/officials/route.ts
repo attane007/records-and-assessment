@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
+import { forceRefreshSessionAccessToken, getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 const BACKEND_URL = (
   process.env.BACKEND_URL ||
@@ -15,29 +15,43 @@ async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT
   }
 
   const url = `${BACKEND_URL}${path}`;
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
-  });
-
   const cookie = req.headers.get('cookie') || '';
   const host = req.headers.get('host') || '';
   const proto = req.headers.get('x-forwarded-proto') || '';
-  if (cookie) headers.set('cookie', cookie);
-  if (host) headers.set('x-forwarded-host', host);
-  if (proto) headers.set('x-forwarded-proto', proto);
-
-  const fetchOptions: RequestInit = {
-    method,
-    headers,
-    cache: 'no-store',
-  };
-  if (body !== undefined && body !== null) {
-    fetchOptions.body = JSON.stringify(body);
-  }
 
   try {
-    const res = await fetch(url, fetchOptions);
+    const requestWithSession = async (activeSession: typeof session) => {
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+        Authorization: `${activeSession.tokenType || 'Bearer'} ${activeSession.accessToken}`,
+      });
+      if (cookie) headers.set('cookie', cookie);
+      if (host) headers.set('x-forwarded-host', host);
+      if (proto) headers.set('x-forwarded-proto', proto);
+
+      const fetchOptions: RequestInit = {
+        method,
+        headers,
+        cache: 'no-store',
+      };
+      if (body !== undefined && body !== null) {
+        fetchOptions.body = JSON.stringify(body);
+      }
+
+      return fetch(url, fetchOptions);
+    };
+
+    let currentSession = session;
+    let res = await requestWithSession(currentSession);
+
+    if (res.status === 401) {
+      const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+      if (refreshedSession?.accessToken) {
+        currentSession = refreshedSession;
+        res = await requestWithSession(currentSession);
+      }
+    }
+
     const text = await res.text();
     let data: unknown;
     try {
@@ -47,7 +61,7 @@ async function forward(req: Request, path: string, method: 'GET' | 'POST' | 'PUT
     }
 
     // Use NextResponse.json to properly set content-type and body
-    return { response: NextResponse.json(data, { status: res.status }), session };
+    return { response: NextResponse.json(data, { status: res.status }), session: currentSession };
   } catch (err) {
     console.error('Error forwarding request to backend:', err);
     return { response: NextResponse.json({ error: 'Backend forwarding failed' }, { status: 502 }), session };

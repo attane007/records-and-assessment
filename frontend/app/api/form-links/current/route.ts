@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionFromRequest, updateSessionToken } from "@/lib/session";
+import { forceRefreshSessionAccessToken, getSessionFromRequest, updateSessionToken } from "@/lib/session";
 
 const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
 
@@ -13,17 +13,29 @@ async function forward(req: NextRequest, method: "GET" | "POST", path: string) {
   const proto = req.headers.get("x-forwarded-proto") || "http";
   const bodyBuffer = method === "POST" ? await req.arrayBuffer() : null;
 
-  const res = await fetch(`${backendUrl}${path}`, {
-    method,
-    headers: {
-      "content-type": req.headers.get("content-type") || "application/json",
-      cookie: req.headers.get("cookie") || "",
-      "x-forwarded-host": host,
-      "x-forwarded-proto": proto,
-      Authorization: `${session.tokenType || "Bearer"} ${session.accessToken}`,
-    },
-    ...(bodyBuffer ? { body: Buffer.from(bodyBuffer) } : {}),
-  });
+  const requestWithSession = (activeSession: typeof session) =>
+    fetch(`${backendUrl}${path}`, {
+      method,
+      headers: {
+        "content-type": req.headers.get("content-type") || "application/json",
+        cookie: req.headers.get("cookie") || "",
+        "x-forwarded-host": host,
+        "x-forwarded-proto": proto,
+        Authorization: `${activeSession.tokenType || "Bearer"} ${activeSession.accessToken}`,
+      },
+      ...(bodyBuffer ? { body: Buffer.from(bodyBuffer) } : {}),
+    });
+
+  let currentSession = session;
+  let res = await requestWithSession(currentSession);
+
+  if (res.status === 401) {
+    const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+    if (refreshedSession?.accessToken) {
+      currentSession = refreshedSession;
+      res = await requestWithSession(currentSession);
+    }
+  }
 
   const text = await res.text();
   const contentType = res.headers.get("content-type") || "application/json";
@@ -32,13 +44,13 @@ async function forward(req: NextRequest, method: "GET" | "POST", path: string) {
     headers: { "Content-Type": contentType },
   });
 
-  const sessionToken = await updateSessionToken(session);
+  const sessionToken = await updateSessionToken(currentSession);
   response.cookies.set("session", sessionToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+    maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
   });
 
   return response;

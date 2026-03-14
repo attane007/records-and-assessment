@@ -1,5 +1,10 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
+import {
+  forceRefreshSessionAccessToken,
+  getSessionFromRequest,
+  updateSessionToken,
+  type SessionPayload,
+} from '@/lib/session';
 
 const backendUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
 
@@ -15,6 +20,12 @@ const strippedResponseHeaderNames = new Set([
   'transfer-encoding',
   'upgrade',
 ]);
+
+type SessionWithAccessToken = SessionPayload & { accessToken: string };
+
+function hasAccessToken(session: SessionPayload | null): session is SessionWithAccessToken {
+  return typeof session?.accessToken === 'string' && session.accessToken.length > 0;
+}
 
 function buildProxyResponseHeaders(source: Headers) {
   const headers = new Headers();
@@ -42,10 +53,34 @@ function buildAuthorizationHeader(tokenType: string | undefined, accessToken: st
   return `${normalizedType} ${accessToken}`;
 }
 
+async function proxyWithRetryOnUnauthorized(
+  path: string,
+  session: SessionWithAccessToken,
+  init: RequestInit
+) {
+  let response = await proxyFetch(path, init);
+  let currentSession = session;
+
+  if (response.status === 401 && currentSession?.accessToken) {
+    const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+    if (hasAccessToken(refreshedSession)) {
+      currentSession = refreshedSession;
+      const retryHeaders = new Headers(init.headers);
+      retryHeaders.set('Authorization', buildAuthorizationHeader(currentSession.tokenType, currentSession.accessToken));
+      response = await proxyFetch(path, {
+        ...init,
+        headers: retryHeaders,
+      });
+    }
+  }
+
+  return { response, session: currentSession };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    if (!session?.accessToken) {
+    if (!hasAccessToken(session)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
     const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
@@ -64,16 +99,16 @@ export async function GET(req: NextRequest) {
       cache: 'no-store',
     };
 
-    const response = await proxyFetch(path, init);
+    const { response, session: currentSession } = await proxyWithRetryOnUnauthorized(path, session, init);
     
     // Persist refreshed session token back to cookie
-    const sessionToken = await updateSessionToken(session);
+    const sessionToken = await updateSessionToken(currentSession);
     response.cookies.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
     });
     
     return response;
@@ -85,7 +120,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    if (!session?.accessToken) {
+    if (!hasAccessToken(session)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
     const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
@@ -106,7 +141,18 @@ export async function PUT(req: NextRequest) {
       body: Buffer.from(body),
     };
 
-    return await proxyFetch(forwardPath, init);
+    const { response, session: currentSession } = await proxyWithRetryOnUnauthorized(forwardPath, session, init);
+
+    const sessionToken = await updateSessionToken(currentSession);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
+    });
+
+    return response;
   } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }
@@ -116,7 +162,7 @@ export async function PUT(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getSessionFromRequest(req);
-    if (!session?.accessToken) {
+    if (!hasAccessToken(session)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     }
     const authorization = buildAuthorizationHeader(session.tokenType, session.accessToken);
@@ -135,7 +181,18 @@ export async function POST(req: NextRequest) {
       body: Buffer.from(body),
     };
 
-    return await proxyFetch(forwardPath, init);
+    const { response, session: currentSession } = await proxyWithRetryOnUnauthorized(forwardPath, session, init);
+
+    const sessionToken = await updateSessionToken(currentSession);
+    response.cookies.set('session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
+    });
+
+    return response;
   } catch {
     return NextResponse.json({ error: 'proxy error' }, { status: 500 });
   }

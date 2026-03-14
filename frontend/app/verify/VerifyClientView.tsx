@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck, ShieldAlert, Clock, User, Globe, FileText, ArrowLeft, Search } from "lucide-react";
-import Link from "next/link";
 
 type AuditLog = {
     id: string;

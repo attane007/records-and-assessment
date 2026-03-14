@@ -25,7 +25,7 @@ function buildProxyResponseHeaders(source: Headers) {
   return headers;
 }
 
-import { getSessionFromRequest, updateSessionToken } from '@/lib/session';
+import { forceRefreshSessionAccessToken, getSessionFromRequest, updateSessionToken } from '@/lib/session';
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
@@ -37,13 +37,25 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const { id } = await context.params;
     const url = `${backendUrl}/api/pdf/${encodeURIComponent(id)}`;
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        cookie: req.headers.get('cookie') || '',
-        Authorization: `${session.tokenType || 'Bearer'} ${session.accessToken}`,
-      },
-    });
+    const requestWithSession = (activeSession: typeof session) =>
+      fetch(url, {
+        method: 'GET',
+        headers: {
+          cookie: req.headers.get('cookie') || '',
+          Authorization: `${activeSession.tokenType || 'Bearer'} ${activeSession.accessToken}`,
+        },
+      });
+
+    let currentSession = session;
+    let res = await requestWithSession(currentSession);
+
+    if (res.status === 401) {
+      const refreshedSession = await forceRefreshSessionAccessToken(currentSession);
+      if (refreshedSession?.accessToken) {
+        currentSession = refreshedSession;
+        res = await requestWithSession(currentSession);
+      }
+    }
 
     if (!res.ok) return NextResponse.json({ error: 'failed to generate pdf' }, { status: res.status });
 
@@ -53,13 +65,13 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const response = new NextResponse(Buffer.from(array), { status: res.status, headers });
     
     // Persist session cookie
-    const sessionToken = await updateSessionToken(session);
+    const sessionToken = await updateSessionToken(currentSession);
     response.cookies.set('session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: Math.max(0, session.exp - Math.floor(Date.now() / 1000)),
+      maxAge: Math.max(0, currentSession.exp - Math.floor(Date.now() / 1000)),
     });
 
     return response;

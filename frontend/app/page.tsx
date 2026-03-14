@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { LogIn } from "lucide-react";
 import { getSessionFromCookies } from "@/lib/session";
 import BrandLogo from "@/components/BrandLogo";
