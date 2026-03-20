@@ -1103,7 +1103,7 @@ export default function RequestsClient() {
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-800 pb-3 mb-3">
                             <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider">
                               <User className="h-3 w-3 text-cyan-600" />
-                              {log.role === 'student' ? 'ผู้ยื่นคำร้อง' : log.role === 'registrar' ? 'นายทะเบียน' : 'ผู้อำนวยการ'}
+                              {log.role === 'student' ? 'ผู้ยื่นคำร้อง' : log.role === 'registrar' ? 'นายทะเบียน' : log.role === 'director' ? 'ผู้อำนวยการ' : 'ผู้ดูแลระบบ'}
                             </div>
                             <div className="flex items-center gap-2 text-[10px] text-slate-400">
                               <Clock className="h-3 w-3" />
@@ -1111,8 +1111,12 @@ export default function RequestsClient() {
                             </div>
                           </div>
 
-                          <p className="mb-4 text-sm font-semibold text-cyan-700 dark:text-cyan-400">
-                            {log.action === 'sign' ? 'ลงลายมือชื่อ' : log.action === 'approve' ? 'อนุมัติคำร้อง' : 'ปฏิเสธคำร้อง'}
+                           <p className="mb-4 text-sm font-semibold text-cyan-700 dark:text-cyan-400">
+                            {log.action === 'sign' ? 'ลงลายมือชื่อ' :
+                              log.action === 'approve' ? 'อนุมัติคำร้อง' :
+                                log.action === 'reject' ? 'ปฏิเสธคำร้อง' :
+                                  log.action === 'completed' ? 'ทำรายการสำเร็จ (โดยแอดมิน)' :
+                                    log.action === 'cancelled' ? 'ยกเลิกคำร้อง (โดยแอดมิน)' : log.action}
                           </p>
 
                           <div className="space-y-2">
