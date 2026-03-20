@@ -1,31 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-
-const backendUrl = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080").replace(/\/$/, "");
+import { NextRequest } from "next/server";
+import { proxyToBackend } from "@/lib/proxy";
 
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ token: string }> }
 ) {
-  try {
-    const { token } = await context.params;
-    const body = await req.arrayBuffer();
-
-    const res = await fetch(`${backendUrl}/api/form-links/${encodeURIComponent(token)}/submit`, {
-      method: "POST",
-      headers: {
-        "content-type": req.headers.get("content-type") || "application/json",
-        cookie: req.headers.get("cookie") || "",
-      },
-      body: Buffer.from(body),
-    });
-
-    const text = await res.text();
-    const contentType = res.headers.get("content-type") || "application/json";
-    return new NextResponse(text, {
-      status: res.status,
-      headers: { "Content-Type": contentType },
-    });
-  } catch {
-    return NextResponse.json({ error: "proxy error" }, { status: 500 });
-  }
+  const { token } = await context.params;
+  const body = await req.arrayBuffer();
+  
+  return proxyToBackend(req, `/api/form-links/${encodeURIComponent(token)}/submit`, {
+    method: "POST",
+    body: Buffer.from(body),
+  });
 }

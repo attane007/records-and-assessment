@@ -997,7 +997,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		err = services.UpdateRequestStatus(ctx, mongoColl, objectID, payload.Status, accountID)
+		err = services.UpdateRequestStatusWithAudit(ctx, mongoColl, auditColl, objectID, payload.Status, c.ClientIP(), c.GetHeader("User-Agent"), accountID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update status"})
 			return

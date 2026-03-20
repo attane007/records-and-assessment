@@ -3,6 +3,7 @@ package settings
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -11,7 +12,8 @@ import (
 type Config struct {
 	MongoURI string
 	DBName   string
-	GOEnv    string
+	GOEnv          string
+	TrustedProxies []string
 }
 
 // OIDCClientID, OIDCClientSecret, FrontendURL, and AuthSecret are used by the
@@ -48,5 +50,20 @@ func LoadConfig() Config {
 		dbName = "records"
 	}
 
-	return Config{MongoURI: mongoURI, DBName: dbName, GOEnv: goEnv}
+	trustedProxiesStr := os.Getenv("TRUSTED_PROXIES")
+	var trustedProxies []string
+	if trustedProxiesStr != "" {
+		for _, s := range strings.Split(trustedProxiesStr, ",") {
+			trimmed := strings.TrimSpace(s)
+			if trimmed != "" {
+				trustedProxies = append(trustedProxies, trimmed)
+			}
+		}
+	} else {
+		// Default to trusting common private ranges if none specified
+		// 127.0.0.1/32, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+		trustedProxies = []string{"127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+	}
+
+	return Config{MongoURI: mongoURI, DBName: dbName, GOEnv: goEnv, TrustedProxies: trustedProxies}
 }

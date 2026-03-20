@@ -90,6 +90,9 @@ func main() {
 	}
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Printf("Warning: failed to set trusted proxies: %v", err)
+	}
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection

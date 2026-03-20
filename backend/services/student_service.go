@@ -215,6 +215,42 @@ func UpdateRequestStatus(ctx context.Context, coll *mongo.Collection, id interfa
 	return err
 }
 
+// UpdateRequestStatusWithAudit updates status and records an audit log for administrative actions.
+func UpdateRequestStatusWithAudit(ctx context.Context, mongoColl *mongo.Collection, auditColl *mongo.Collection, id interface{}, status string, ipAddress, userAgent string, accountID string) error {
+	// Fetch current state to compute hash
+	record, err := GetRequestByID(ctx, mongoColl, id, accountID)
+	if err != nil {
+		return err
+	}
+	hash := ComputeRequestHash(record)
+
+	// Perform the update
+	if err := UpdateRequestStatus(ctx, mongoColl, id, status, accountID); err != nil {
+		return err
+	}
+
+	// Record Audit Log
+	objID, decodeErr := ToObjectID(record.ID)
+	if decodeErr == nil {
+		audit := models.AuditLog{
+			RequestID:    objID,
+			Role:         models.SignRoleAdmin,
+			Action:       status, // "completed", "cancelled", etc.
+			DocumentHash: hash,
+			IPAddress:    ipAddress,
+			UserAgent:    userAgent,
+			Timestamp:    time.Now().UTC(),
+		}
+		if auditErr := RecordAuditLog(ctx, auditColl, audit); auditErr != nil {
+			log.Printf("[AUDIT] UpdateRequestStatusWithAudit Failed: %v", auditErr)
+		}
+	} else {
+		log.Printf("[AUDIT] ID Conversion Error: %v", decodeErr)
+	}
+
+	return nil
+}
+
 func signaturePathByRole(role models.SignRole) (string, error) {
 	switch role {
 	case models.SignRoleStudent:

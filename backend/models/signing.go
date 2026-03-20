@@ -13,6 +13,7 @@ const (
 	SignRoleStudent   SignRole = "student"
 	SignRoleRegistrar SignRole = "registrar"
 	SignRoleDirector  SignRole = "director"
+	SignRoleAdmin     SignRole = "admin"
 )
 
 // SignLink stores one official signing link entry.
