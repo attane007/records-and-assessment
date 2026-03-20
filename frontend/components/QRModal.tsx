@@ -12,7 +12,8 @@ export default function QRModal({ isOpen, onClose, url }: QRModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
+      <div className="flex min-h-full items-center justify-center py-8">
       <div 
         className="fixed inset-0" 
         onClick={onClose}
@@ -61,6 +62,7 @@ export default function QRModal({ isOpen, onClose, url }: QRModalProps) {
               Done
             </button>
           </div>
+        </div>
         </div>
       </div>
     </div>

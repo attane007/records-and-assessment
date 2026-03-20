@@ -956,100 +956,102 @@ export default function RequestsClient() {
       </main >
 
       {linksModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">ลิงก์ลงนามเจ้าหน้าที่</h2>
-                <p className="text-sm text-slate-600">คำร้อง: {activeModalRequest?.label || "-"}</p>
-              </div>
-              <button
-                type="button"
-                onClick={closeLinksModal}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
-              >
-                ปิด
-              </button>
-            </div>
-
-            {linksModalLoading ? (
-              <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-700">
-                กำลังสร้างลิงก์นายทะเบียนและผู้อำนวยการ...
-              </div>
-            ) : null}
-
-            {linksModalError ? (
-              <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {linksModalError}
-              </div>
-            ) : null}
-
-            {linksModalCopyMessage ? (
-              <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {linksModalCopyMessage}
-              </div>
-            ) : null}
-
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 text-sm font-semibold text-slate-800">นายทะเบียน</div>
-                <input
-                  readOnly
-                  value={modalLinks.registrar?.sign_url || ""}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
-                  placeholder="ยังไม่มีลิงก์"
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyRoleLink("registrar")}
-                    disabled={!modalLinks.registrar}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                  >
-                    คัดลอกลิงก์
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSendRoleEmail("registrar")}
-                    disabled={!officialEmails.registrar || sendingRole === "registrar"}
-                    className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-xs text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
-                  >
-                    {sendingRole === "registrar" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
-                  </button>
-                  {!officialEmails.registrar ? (
-                    <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลนายทะเบียน</span>
-                  ) : null}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/55 p-4">
+          <div className="flex min-h-full items-center justify-center py-8">
+            <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">ลิงก์ลงนามเจ้าหน้าที่</h2>
+                  <p className="text-sm text-slate-600">คำร้อง: {activeModalRequest?.label || "-"}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={closeLinksModal}
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  ปิด
+                </button>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="mb-2 text-sm font-semibold text-slate-800">ผู้อำนวยการ</div>
-                <input
-                  readOnly
-                  value={modalLinks.director?.sign_url || ""}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
-                  placeholder="ยังไม่มีลิงก์"
-                />
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyRoleLink("director")}
-                    disabled={!modalLinks.director}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                  >
-                    คัดลอกลิงก์
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleSendRoleEmail("director")}
-                    disabled={!officialEmails.director || sendingRole === "director"}
-                    className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
-                  >
-                    {sendingRole === "director" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
-                  </button>
-                  {!officialEmails.director ? (
-                    <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลผู้อำนวยการ</span>
-                  ) : null}
+              {linksModalLoading ? (
+                <div className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-700">
+                  กำลังสร้างลิงก์นายทะเบียนและผู้อำนวยการ...
+                </div>
+              ) : null}
+
+              {linksModalError ? (
+                <div className="mb-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {linksModalError}
+                </div>
+              ) : null}
+
+              {linksModalCopyMessage ? (
+                <div className="mb-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {linksModalCopyMessage}
+                </div>
+              ) : null}
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-800">นายทะเบียน</div>
+                  <input
+                    readOnly
+                    value={modalLinks.registrar?.sign_url || ""}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
+                    placeholder="ยังไม่มีลิงก์"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyRoleLink("registrar")}
+                      disabled={!modalLinks.registrar}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      คัดลอกลิงก์
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSendRoleEmail("registrar")}
+                      disabled={!officialEmails.registrar || sendingRole === "registrar"}
+                      className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-1.5 text-xs text-cyan-800 hover:bg-cyan-100 disabled:opacity-50"
+                    >
+                      {sendingRole === "registrar" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
+                    </button>
+                    {!officialEmails.registrar ? (
+                      <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลนายทะเบียน</span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-2 text-sm font-semibold text-slate-800">ผู้อำนวยการ</div>
+                  <input
+                    readOnly
+                    value={modalLinks.director?.sign_url || ""}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700"
+                    placeholder="ยังไม่มีลิงก์"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyRoleLink("director")}
+                      disabled={!modalLinks.director}
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      คัดลอกลิงก์
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleSendRoleEmail("director")}
+                      disabled={!officialEmails.director || sendingRole === "director"}
+                      className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+                    >
+                      {sendingRole === "director" ? "กำลังส่งอีเมล..." : "ส่งอีเมล"}
+                    </button>
+                    {!officialEmails.director ? (
+                      <span className="text-xs text-slate-500">ยังไม่ตั้งค่าอีเมลผู้อำนวยการ</span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1059,87 +1061,89 @@ export default function RequestsClient() {
 
       {/* Audit Log Modal */}
       {auditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-cyan-100 dark:bg-cyan-900/50 rounded-xl">
-                  <History className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div className="flex min-h-full items-center justify-center py-8">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-cyan-100 dark:bg-cyan-900/50 rounded-xl">
+                    <History className="w-6 h-6 text-cyan-600 dark:text-cyan-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">บันทึกประวัติการลงนาม</h2>
+                    <p className="text-xs text-slate-500">Audit Trail: {activeAuditRequest?.prefix} {activeAuditRequest?.name}</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">บันทึกประวัติการลงนาม</h2>
-                  <p className="text-xs text-slate-500">Audit Trail: {activeAuditRequest?.prefix} {activeAuditRequest?.name}</p>
-                </div>
+                <button onClick={closeAuditModal} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <button onClick={closeAuditModal} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {auditLoading ? (
-                <div className="py-20 text-center">
-                  <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
-                  <p className="text-sm text-slate-500">กำลังโหลดประวัติ...</p>
-                </div>
-              ) : auditError ? (
-                <div className="py-20 text-center space-y-4">
-                  <ShieldCheck className="mx-auto h-12 w-12 text-slate-300" />
-                  <p className="text-slate-500 font-medium">{auditError}</p>
-                </div>
-              ) : (
-                <div className="relative space-y-6 before:absolute before:left-8 before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-slate-100 dark:before:bg-slate-800">
-                  {auditLogs.map((log, idx) => (
-                    <div key={log.id} className="relative pl-16">
-                      <div className="absolute left-4 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-bold border border-slate-200 dark:border-slate-700">
-                        {idx + 1}
-                      </div>
-                      <div className="rounded-2xl bg-white dark:bg-slate-950 p-5 border border-slate-100 dark:border-slate-800 shadow-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-800 pb-3 mb-3">
-                          <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider">
-                            <User className="h-3 w-3 text-cyan-600" />
-                            {log.role === 'student' ? 'ผู้ยื่นคำร้อง' : log.role === 'registrar' ? 'นายทะเบียน' : 'ผู้อำนวยการ'}
-                          </div>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                            <Clock className="h-3 w-3" />
-                            {new Date(log.timestamp).toLocaleString("th-TH")}
-                          </div>
+              {/* Modal Body */}
+              <div className="flex-1 overflow-y-auto p-6">
+                {auditLoading ? (
+                  <div className="py-20 text-center">
+                    <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-cyan-500 border-t-transparent" />
+                    <p className="text-sm text-slate-500">กำลังโหลดประวัติ...</p>
+                  </div>
+                ) : auditError ? (
+                  <div className="py-20 text-center space-y-4">
+                    <ShieldCheck className="mx-auto h-12 w-12 text-slate-300" />
+                    <p className="text-slate-500 font-medium">{auditError}</p>
+                  </div>
+                ) : (
+                  <div className="relative space-y-6 before:absolute before:left-8 before:top-2 before:h-[calc(100%-16px)] before:w-px before:bg-slate-100 dark:before:bg-slate-800">
+                    {auditLogs.map((log, idx) => (
+                      <div key={log.id} className="relative pl-16">
+                        <div className="absolute left-4 top-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 text-xs font-bold border border-slate-200 dark:border-slate-700">
+                          {idx + 1}
                         </div>
-
-                        <p className="mb-4 text-sm font-semibold text-cyan-700 dark:text-cyan-400">
-                          {log.action === 'sign' ? 'ลงลายมือชื่อ' : log.action === 'approve' ? 'อนุมัติคำร้อง' : 'ปฏิเสธคำร้อง'}
-                        </p>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800">
-                            <FileText className="h-3 w-3 text-slate-400 shrink-0" />
-                            <span className="text-[10px] text-slate-500 font-mono truncate" title={log.document_hash}>HASH: {log.document_hash}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500">
-                              <Globe className="h-3 w-3" />
-                              IP: {log.ip_address}
+                        <div className="rounded-2xl bg-white dark:bg-slate-950 p-5 border border-slate-100 dark:border-slate-800 shadow-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-50 dark:border-slate-800 pb-3 mb-3">
+                            <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-slate-100 uppercase text-xs tracking-wider">
+                              <User className="h-3 w-3 text-cyan-600" />
+                              {log.role === 'student' ? 'ผู้ยื่นคำร้อง' : log.role === 'registrar' ? 'นายทะเบียน' : 'ผู้อำนวยการ'}
                             </div>
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500 max-w-full">
-                              <Search className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{log.user_agent}</span>
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                              <Clock className="h-3 w-3" />
+                              {new Date(log.timestamp).toLocaleString("th-TH")}
+                            </div>
+                          </div>
+
+                          <p className="mb-4 text-sm font-semibold text-cyan-700 dark:text-cyan-400">
+                            {log.action === 'sign' ? 'ลงลายมือชื่อ' : log.action === 'approve' ? 'อนุมัติคำร้อง' : 'ปฏิเสธคำร้อง'}
+                          </p>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200/50 dark:border-slate-800">
+                              <FileText className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="text-[10px] text-slate-500 font-mono truncate" title={log.document_hash}>HASH: {log.document_hash}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500">
+                                <Globe className="h-3 w-3" />
+                                IP: {log.ip_address}
+                              </div>
+                              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-900 text-[10px] text-slate-500 max-w-full">
+                                <Search className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{log.user_agent}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800">
-              <p className="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
-                Immutable Record Protection • ETDA Compliant
-              </p>
+              {/* Modal Footer */}
+              <div className="p-6 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800">
+                <p className="text-[10px] text-slate-400 text-center uppercase tracking-widest font-bold">
+                  Immutable Record Protection • ETDA Compliant
+                </p>
+              </div>
             </div>
           </div>
         </div>
