@@ -36,6 +36,8 @@ export async function GET(request: Request) {
     // The backend drives the full OIDC flow and redirects here with the signed
     // session JWT as a query parameter after a successful exchange.
     const token = searchParams.get('token');
+    const returnToRaw = searchParams.get('return_to') || '/admin';
+    const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/admin';
 
     const fail = (reason: string) =>
         NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(reason)}`, frontendOrigin));
@@ -66,7 +68,9 @@ export async function GET(request: Request) {
     const sessionToken = await createSessionToken(sessionPayload);
     const maxAge = Math.max(0, sessionExp - now);
 
-    const response = NextResponse.redirect(new URL('/admin', frontendOrigin));
+    const target = new URL(returnTo, frontendOrigin);
+    target.searchParams.set("auth_event", "session-updated");
+    const response = NextResponse.redirect(target);
     response.cookies.set('session', sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',

@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Sarabun } from "next/font/google";
+import { Suspense } from "react";
+import AuthSync from "@/components/AuthSync";
 import "./globals.css";
 
 const siteUrl = "https://pp1.krufame.work";
@@ -96,6 +98,9 @@ export default function RootLayout({
       <body
         className={`${sarabun.variable} antialiased w-full overflow-x-hidden`}
       >
+        <Suspense fallback={null}>
+          <AuthSync />
+        </Suspense>
         {children}
       </body>
     </html>

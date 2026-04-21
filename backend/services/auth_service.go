@@ -52,6 +52,7 @@ type OIDCEndpoints struct {
 	AuthorizationEndpoint string
 	TokenEndpoint         string
 	UserinfoEndpoint      string
+	EndSessionEndpoint    string
 }
 
 var (
@@ -65,6 +66,7 @@ type oidcDiscoveryDoc struct {
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
 	TokenEndpoint         string `json:"token_endpoint"`
 	UserinfoEndpoint      string `json:"userinfo_endpoint"`
+	EndSessionEndpoint    string `json:"end_session_endpoint"`
 }
 
 // DiscoverOIDCEndpoints fetches (and caches) OIDC endpoint URLs.
@@ -104,6 +106,7 @@ func DiscoverOIDCEndpoints(baseURL, discoveryURL string) (*OIDCEndpoints, error)
 	authEP := doc.AuthorizationEndpoint
 	tokenEP := doc.TokenEndpoint
 	userinfoEP := doc.UserinfoEndpoint
+	endSessionEP := doc.EndSessionEndpoint
 
 	if authEP == "" && base != "" {
 		authEP = base + "/auth/oauth/authorize"
@@ -114,6 +117,9 @@ func DiscoverOIDCEndpoints(baseURL, discoveryURL string) (*OIDCEndpoints, error)
 	if userinfoEP == "" && base != "" {
 		userinfoEP = base + "/auth/profile"
 	}
+	if endSessionEP == "" && base != "" {
+		endSessionEP = base + "/auth/oauth/end-session"
+	}
 
 	if authEP == "" || tokenEP == "" || userinfoEP == "" {
 		return nil, fmt.Errorf("OIDC discovery document missing required endpoints")
@@ -123,6 +129,7 @@ func DiscoverOIDCEndpoints(baseURL, discoveryURL string) (*OIDCEndpoints, error)
 		AuthorizationEndpoint: authEP,
 		TokenEndpoint:         tokenEP,
 		UserinfoEndpoint:      userinfoEP,
+		EndSessionEndpoint:    endSessionEP,
 	}
 	oidcEndpointsMu.Lock()
 	oidcEndpointsCache = ep
@@ -237,6 +244,7 @@ type OIDCTransactionPayload struct {
 	Nonce        string `json:"nonce"`
 	CodeVerifier string `json:"codeVerifier"`
 	RedirectURI  string `json:"redirectUri"`
+	ReturnTo     string `json:"returnTo,omitempty"`
 	Exp          int64  `json:"exp"`
 }
 

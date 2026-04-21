@@ -246,6 +246,9 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	r.GET("/auth/login", authHandler.Login)
 	r.GET("/auth/callback", authHandler.Callback)
 	r.POST("/auth/refresh", authHandler.Refresh)
+	r.GET("/auth/session", authHandler.Session)
+	r.POST("/auth/logout", authHandler.Logout)
+	r.GET("/auth/frontchannel-logout", authHandler.FrontchannelLogout)
 
 	r.GET("/api/form-links/current", requireAuth, func(c *gin.Context) {
 		accountID := accountIDFromContext(c)

@@ -2,11 +2,30 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+
+const SILENT_SSO_COOLDOWN_MS = 2 * 60 * 1000;
+const SILENT_SSO_LAST_ATTEMPT_KEY = "ra_silent_sso_last_attempt_at";
+const SESSION_UPDATE_MARKER = "ra_session_updated_at";
+
+function resolveSafeReturnTo(value: string | null) {
+  if (!value || !value.startsWith("/")) {
+    return "/admin";
+  }
+  return value;
+}
 
 function LoginContent() {
   const searchParams = useSearchParams();
-  const error = searchParams.get('error');
+  const router = useRouter();
+  const error = searchParams.get("error");
+  const reason = searchParams.get("reason");
+  const returnTo = resolveSafeReturnTo(searchParams.get("return_to"));
+  const hasTerminalMessage = Boolean(error || reason);
+  const silentAttemptedRef = useRef(false);
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const errorMessages: Record<string, string> = {
     auth_failed: "การยืนยันตัวตนล้มเหลว",
@@ -21,10 +40,77 @@ function LoginContent() {
     profile_fetch_failed: "ไม่สามารถดึงข้อมูลโปรไฟล์ได้",
     invalid_profile: "รูปแบบข้อมูลโปรไฟล์ไม่ถูกต้อง",
     session_token_missing: "ไม่พบ access token ใน session กรุณาเข้าสู่ระบบใหม่",
-    auth_exception: "เกิดข้อผิดพลาดในระบบเข้าสู่ระบบ"
+    auth_exception: "เกิดข้อผิดพลาดในระบบเข้าสู่ระบบ",
+    session_invalidated: "เซสชันถูกยกเลิก กรุณาเข้าสู่ระบบใหม่",
   };
 
   const displayError = error ? (errorMessages[error] || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง") : null;
+  const displayNotice = reason === "session_logged_out" ? "คุณออกจากระบบแล้ว" : null;
+
+  const manualLoginHref = useMemo(
+    () => `/api/login?return_to=${encodeURIComponent(returnTo)}`,
+    [returnTo]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapSession() {
+      try {
+        const res = await fetch("/api/auth/session", {
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        const payload = await res.json().catch(() => null);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (payload?.authenticated) {
+          try {
+            window.localStorage.setItem(SESSION_UPDATE_MARKER, String(Date.now()));
+          } catch {
+            // ignore storage failures
+          }
+          window.dispatchEvent(new Event("gauth:session-updated"));
+          router.replace(returnTo);
+          return;
+        }
+
+        const now = Date.now();
+        const lastAttemptRaw = window.localStorage.getItem(SILENT_SSO_LAST_ATTEMPT_KEY);
+        const lastAttempt = Number.parseInt(lastAttemptRaw || "0", 10);
+        const cooldownActive = Number.isFinite(lastAttempt) && now - lastAttempt < SILENT_SSO_COOLDOWN_MS;
+
+        if (!hasTerminalMessage && !cooldownActive && !silentAttemptedRef.current) {
+          silentAttemptedRef.current = true;
+          window.localStorage.setItem(SILENT_SSO_LAST_ATTEMPT_KEY, String(now));
+          setStatusMessage("กำลังตรวจสอบการเข้าสู่ระบบอัตโนมัติ...");
+          window.location.replace(`/api/login?prompt=none&return_to=${encodeURIComponent(returnTo)}`);
+          return;
+        }
+
+        if (cooldownActive && !hasTerminalMessage) {
+          setStatusMessage("เพิ่งลอง SSO แบบเงียบไปแล้ว รอสักครู่ก่อนลองใหม่");
+        }
+
+        setBootstrapping(false);
+      } catch {
+        if (!cancelled) {
+          setBootstrapping(false);
+        }
+      }
+    }
+
+    void bootstrapSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasTerminalMessage, returnTo, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 relative overflow-hidden">
@@ -48,6 +134,22 @@ function LoginContent() {
           </p>
         </div>
 
+        {bootstrapping && (
+          <div className="mb-6 p-4 rounded-xl bg-cyan-50/70 dark:bg-cyan-900/20 border border-cyan-100 dark:border-cyan-900/40 text-sm text-cyan-700 dark:text-cyan-300 flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin shrink-0 mt-0.5" />
+            <p>{statusMessage || "กำลังตรวจสอบเซสชันปัจจุบันและเตรียม SSO อัตโนมัติ"}</p>
+          </div>
+        )}
+
+        {displayNotice && (
+          <div className="mb-6 p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/40 text-sm text-emerald-700 dark:text-emerald-300 flex items-start gap-3">
+            <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p>{displayNotice}</p>
+          </div>
+        )}
+
         {displayError && (
           <div className="mb-6 p-4 rounded-xl bg-red-50/50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 text-sm text-red-600 dark:text-red-400 flex items-start gap-3 animate-in slide-in-from-top-2 fade-in duration-300">
             <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -59,8 +161,8 @@ function LoginContent() {
 
         <div className="mt-6">
           <Link
-            href="/api/login"
-            className="group relative w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-6 py-3.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300 overflow-hidden"
+            href={manualLoginHref}
+            className={`group relative w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white px-6 py-3.5 rounded-xl font-medium shadow-lg hover:shadow-xl hover:shadow-cyan-500/25 transition-all duration-300 overflow-hidden ${bootstrapping ? "pointer-events-none opacity-80" : ""}`}
           >
             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-in-out" />
             <svg className="w-5 h-5 relative z-10" viewBox="0 0 24 24" fill="currentColor">
