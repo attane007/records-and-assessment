@@ -220,7 +220,7 @@ func notifyOfficialsSigningLinksAsync(requestID primitive.ObjectID, signLinksCol
 }
 
 // RegisterRoutes registers all HTTP routes on the provided gin Engine.
-func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection, formLinksColl *mongo.Collection, auditColl *mongo.Collection) {
+func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *mongo.Collection, adminColl *mongo.Collection, signLinksColl *mongo.Collection, signSessionsColl *mongo.Collection, formLinksColl *mongo.Collection, auditColl *mongo.Collection, logoutHandlesColl *mongo.Collection) {
 	// CORS: allow all origins (no credentials)
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -242,7 +242,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	requireAuth := RequireSessionAuth(authSecret)
 
 	// ─── OIDC Auth routes (no auth middleware required) ───────────────────────
-	authHandler := NewAuthHandler()
+	authHandler := NewAuthHandler(logoutHandlesColl)
 	r.GET("/auth/login", authHandler.Login)
 	r.GET("/auth/callback", authHandler.Callback)
 	r.POST("/auth/refresh", authHandler.Refresh)

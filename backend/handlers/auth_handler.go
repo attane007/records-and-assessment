@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,13 +17,16 @@ import (
 	"backend/services"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // AuthHandler handles the OIDC authentication flow on behalf of the frontend.
 // The frontend redirects the browser to /auth/login; the backend drives the full
 // OAuth2 Authorization Code + PKCE flow and, after a successful exchange, hands
 // back a signed session JWT to the frontend via a query-parameter redirect.
-type AuthHandler struct{}
+type AuthHandler struct {
+	logoutHandlesColl *mongo.Collection
+}
 
 type authErrorPayload struct {
 	Error authErrorDetail `json:"error"`
@@ -37,8 +41,8 @@ type authErrorDetail struct {
 }
 
 // NewAuthHandler returns a new AuthHandler.
-func NewAuthHandler() *AuthHandler {
-	return &AuthHandler{}
+func NewAuthHandler(logoutHandlesColl *mongo.Collection) *AuthHandler {
+	return &AuthHandler{logoutHandlesColl: logoutHandlesColl}
 }
 
 func authSecret() string { return os.Getenv("AUTH_SECRET") }
@@ -293,14 +297,17 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		fail("token_exchange_failed")
 		return
 	}
+	if strings.TrimSpace(tokens.IDToken) == "" {
+		log.Printf("token exchange returned no id_token")
+		fail("missing_id_token")
+		return
+	}
 
 	// Verify nonce in id_token if present.
-	if tokens.IDToken != "" {
-		if err := verifyIDTokenNonce(tokens.IDToken, tx.Nonce); err != nil {
-			log.Printf("nonce mismatch: %v", err)
-			fail("nonce_mismatch")
-			return
-		}
+	if err := verifyIDTokenNonce(tokens.IDToken, tx.Nonce); err != nil {
+		log.Printf("nonce mismatch: %v", err)
+		fail("nonce_mismatch")
+		return
 	}
 
 	profile, err := services.FetchUserInfo(tokens.AccessToken, endpoints.UserinfoEndpoint)
@@ -330,8 +337,23 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	if expiresIn <= 0 {
 		expiresIn = 8 * 3600
 	}
+	if h.logoutHandlesColl == nil {
+		log.Printf("logout handle collection is not configured")
+		fail("config_error")
+		return
+	}
 
-	sessionJWT, err := services.IssueSessionJWT(secret, accountID, username, accountID, expiresIn)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	logoutHandle, err := services.CreateLogoutHandle(ctx, h.logoutHandlesColl, accountID, accountID, tokens.IDToken, clientID, services.DefaultSessionExpiry(time.Now()))
+	if err != nil {
+		log.Printf("create logout handle failed: %v", err)
+		fail("logout_handle_failed")
+		return
+	}
+
+	sessionJWT, err := services.IssueSessionJWTWithLogoutHandle(secret, accountID, username, accountID, logoutHandle.ID.Hex(), expiresIn)
 	if err != nil {
 		log.Printf("issue session jwt: %v", err)
 		fail("internal_error")
@@ -506,37 +528,59 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	if requested == "" {
 		requested = defaultRedirect
 	}
+	logoutURL := requested
 	if !isAllowlistedURI(requested, allowlist) {
 		authError(c, http.StatusBadRequest, "post_logout_redirect_uri_mismatch", "Post logout redirect URI is not allowlisted", "post_logout_redirect_uri_not_allowlisted", false)
 		return
 	}
 
-	endpoints, err := services.DiscoverOIDCEndpoints(
-		os.Getenv("OIDC_BASE_URL"),
-		os.Getenv("OIDC_DISCOVERY_URL"),
-	)
-	if err != nil || strings.TrimSpace(endpoints.EndSessionEndpoint) == "" {
-		log.Printf("OIDC end-session discovery failed: %v", err)
-		authError(c, http.StatusInternalServerError, "oidc_discovery_failed", "OIDC discovery failed", "end_session_endpoint_unavailable", true)
-		return
-	}
-
-	state, genErr := services.GenerateRandomState()
-	if genErr != nil {
-		authError(c, http.StatusInternalServerError, "internal_error", "Failed to prepare logout state", "logout_state_generation_failed", true)
-		return
-	}
-
-	params := url.Values{}
-	params.Set("post_logout_redirect_uri", requested)
-	params.Set("state", state)
-
 	bearerToken := extractBearerToken(c.GetHeader("Authorization"))
-	if bearerToken != "" {
-		params.Set("id_token_hint", bearerToken)
+	secret := authSecret()
+	if bearerToken != "" && secret != "" && h.logoutHandlesColl != nil {
+		claims, claimsErr := services.VerifySessionJWT(secret, bearerToken)
+		if claimsErr != nil {
+			claims, claimsErr = services.VerifySessionJWTAllowExpired(secret, bearerToken)
+		}
+		if claimsErr == nil && claims != nil && strings.TrimSpace(claims.LogoutHandleID) != "" {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+			defer cancel()
+
+			handle, handleErr := services.GetLogoutHandleByID(ctx, h.logoutHandlesColl, claims.LogoutHandleID)
+			if handleErr == nil && strings.TrimSpace(handle.IDToken) != "" {
+				endpoints, discoveryErr := services.DiscoverOIDCEndpoints(
+					os.Getenv("OIDC_BASE_URL"),
+					os.Getenv("OIDC_DISCOVERY_URL"),
+				)
+				if discoveryErr == nil && strings.TrimSpace(endpoints.EndSessionEndpoint) != "" {
+					state, genErr := services.GenerateRandomState()
+					if genErr == nil {
+						params := url.Values{}
+						params.Set("post_logout_redirect_uri", requested)
+						params.Set("state", state)
+						params.Set("id_token_hint", handle.IDToken)
+						logoutURL = endpoints.EndSessionEndpoint + "?" + params.Encode()
+					} else {
+						log.Printf("logout state generation failed: %v", genErr)
+					}
+				} else if discoveryErr != nil {
+					log.Printf("OIDC end-session discovery failed: %v", discoveryErr)
+				} else {
+					log.Printf("OIDC end-session endpoint is empty")
+				}
+			} else if handleErr != nil {
+				log.Printf("logout handle lookup failed: %v", handleErr)
+			}
+		} else if claimsErr != nil {
+			log.Printf("logout session verification failed, using local redirect fallback: %v", claimsErr)
+		}
+	} else if bearerToken == "" {
+		log.Printf("logout request missing bearer token, using local redirect fallback")
+	} else if secret == "" {
+		log.Printf("auth secret is not configured, using local redirect fallback")
+	} else {
+		log.Printf("logout handle collection is not configured, using local redirect fallback")
 	}
 
-	logoutURL := endpoints.EndSessionEndpoint + "?" + params.Encode()
 	isProd := os.Getenv("GO_ENV") == "production"
 	setNoStoreHeaders(c)
 	c.SetCookie("oidc_tx", "", -1, "/", "", isProd, true)

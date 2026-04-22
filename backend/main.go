@@ -50,6 +50,8 @@ func main() {
 	mongoCollSignSessions := client.Database(cfg.DBName).Collection("sign_sessions")
 	// collection for reusable public form links
 	mongoCollFormLinks := client.Database(cfg.DBName).Collection("form_links")
+	// collection for OIDC logout handles
+	mongoCollLogoutHandles := client.Database(cfg.DBName).Collection("logout_handles")
 	// collection for audit logs
 	mongoCollAudit := client.Database(cfg.DBName).Collection("audit_logs")
 
@@ -80,6 +82,20 @@ func main() {
 		log.Printf("Warning: failed to ensure form_links indexes: %v", indexErr)
 	}
 
+	_, logoutIndexErr := mongoCollLogoutHandles.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{
+			Keys:    bson.D{{Key: "account_id", Value: 1}},
+			Options: options.Index().SetBackground(true),
+		},
+		{
+			Keys:    bson.D{{Key: "expires_at", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(0).SetBackground(true),
+		},
+	})
+	if logoutIndexErr != nil {
+		log.Printf("Warning: failed to ensure logout_handles indexes: %v", logoutIndexErr)
+	}
+
 	if err := adminService.InitializeDefaultAdmin(ctx, defaultUsername, defaultPassword); err != nil {
 		log.Printf("Warning: failed to initialize default admin: %v", err)
 	}
@@ -96,7 +112,7 @@ func main() {
 
 	// Register routes from handlers package (keeps main.go minimal)
 	// pass both the students collection and the officials collection
-	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions, mongoCollFormLinks, mongoCollAudit)
+	handlers.RegisterRoutes(r, mongoColl, mongoCollOfficials, mongoCollAdmin, mongoCollSignLinks, mongoCollSignSessions, mongoCollFormLinks, mongoCollAudit, mongoCollLogoutHandles)
 
 	r.Run() // listen and serve on 0.0.0.0:8080
 }
