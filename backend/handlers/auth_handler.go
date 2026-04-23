@@ -28,6 +28,7 @@ import (
 // back a signed session JWT to the frontend via a query-parameter redirect.
 type AuthHandler struct {
 	logoutHandlesColl *mongo.Collection
+	backchannelEvents *backchannelLogoutEventStore
 }
 
 type authErrorPayload struct {
@@ -46,7 +47,10 @@ const backchannelLogoutEventClaim = "http://schemas.openid.net/event/backchannel
 
 // NewAuthHandler returns a new AuthHandler.
 func NewAuthHandler(logoutHandlesColl *mongo.Collection) *AuthHandler {
-	return &AuthHandler{logoutHandlesColl: logoutHandlesColl}
+	return &AuthHandler{
+		logoutHandlesColl: logoutHandlesColl,
+		backchannelEvents: newBackchannelLogoutEventStore(7 * 24 * time.Hour),
+	}
 }
 
 func authSecret() string { return os.Getenv("AUTH_SECRET") }
@@ -699,6 +703,17 @@ func (h *AuthHandler) BackchannelLogout(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid logout token"})
 		return
 	}
+	if strings.TrimSpace(claims.ID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logout token missing jti"})
+		return
+	}
+	if h.backchannelEvents != nil && !h.backchannelEvents.Remember(claims.ID) {
+		log.Printf("backchannel logout replay ignored jti=%s sid=%s", claims.ID, claims.Sid)
+		c.Header("Cache-Control", "no-store")
+		c.Header("Pragma", "no-cache")
+		c.Status(http.StatusNoContent)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
@@ -738,6 +753,9 @@ func verifyBackchannelLogoutToken(secret, issuer, audience, rawToken string) (*b
 	}
 	if token == nil || !token.Valid {
 		return nil, fmt.Errorf("invalid logout token")
+	}
+	if strings.TrimSpace(claims.ID) == "" {
+		return nil, fmt.Errorf("logout token missing jti")
 	}
 	if strings.TrimSpace(claims.Sid) == "" {
 		return nil, fmt.Errorf("logout token missing sid")

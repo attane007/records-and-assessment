@@ -240,13 +240,14 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 
 	authSecret := os.Getenv("AUTH_SECRET")
 	requireAuth := RequireSessionAuth(authSecret, logoutHandlesColl)
+	authRateLimiter := newAuthRateLimitMiddleware(120, time.Minute)
 
 	// ─── OIDC Auth routes (no auth middleware required) ───────────────────────
 	authHandler := NewAuthHandler(logoutHandlesColl)
 	r.GET("/auth/login", authHandler.Login)
 	r.GET("/auth/callback", authHandler.Callback)
-	r.POST("/auth/refresh", authHandler.Refresh)
-	r.GET("/auth/session", authHandler.Session)
+	r.POST("/auth/refresh", authRateLimiter, authHandler.Refresh)
+	r.GET("/auth/session", authRateLimiter, authHandler.Session)
 	r.POST("/auth/logout", authHandler.Logout)
 	r.GET("/auth/frontchannel-logout", authHandler.FrontchannelLogout)
 	r.POST("/auth/frontchannel-logout", authHandler.FrontchannelLogout)
