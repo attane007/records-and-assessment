@@ -239,7 +239,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	})
 
 	authSecret := os.Getenv("AUTH_SECRET")
-	requireAuth := RequireSessionAuth(authSecret)
+	requireAuth := RequireSessionAuth(authSecret, logoutHandlesColl)
 
 	// ─── OIDC Auth routes (no auth middleware required) ───────────────────────
 	authHandler := NewAuthHandler(logoutHandlesColl)
@@ -249,6 +249,7 @@ func RegisterRoutes(r *gin.Engine, mongoColl *mongo.Collection, officialsColl *m
 	r.GET("/auth/session", authHandler.Session)
 	r.POST("/auth/logout", authHandler.Logout)
 	r.GET("/auth/frontchannel-logout", authHandler.FrontchannelLogout)
+	r.POST("/auth/frontchannel-logout", authHandler.FrontchannelLogout)
 
 	r.GET("/api/form-links/current", requireAuth, func(c *gin.Context) {
 		accountID := accountIDFromContext(c)

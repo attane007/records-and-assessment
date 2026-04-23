@@ -49,6 +49,7 @@ export async function GET(request: Request) {
         sub: string;
         username: string;
         accountId: string;
+        sessionVersion?: number;
         exp: number;
     }>(token);
     if (!claims) return fail('invalid_token');
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
         exp: sessionExp,
         accessToken: token,
         accessTokenExp: claims.exp,
+        ...(typeof claims.sessionVersion === "number" ? { sessionVersion: claims.sessionVersion } : {}),
     };
     const sessionToken = await createSessionToken(sessionPayload);
     const maxAge = Math.max(0, sessionExp - now);

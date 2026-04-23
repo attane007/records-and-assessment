@@ -51,4 +51,33 @@ func TestIssueSessionJWTWithLogoutHandlePreservesHandleID(t *testing.T) {
 	if claims.LogoutHandleID != handleID {
 		t.Fatalf("LogoutHandleID mismatch: got %q want %q", claims.LogoutHandleID, handleID)
 	}
+	if claims.SessionVersion != 1 {
+		t.Fatalf("SessionVersion mismatch: got %d want %d", claims.SessionVersion, 1)
+	}
+}
+
+func TestIssueSessionJWTForSessionIncrementsSessionVersion(t *testing.T) {
+	originalToken, err := IssueSessionJWT("secret", "sub-1", "tester", "acct-1", 3600)
+	if err != nil {
+		t.Fatalf("IssueSessionJWT returned error: %v", err)
+	}
+
+	originalClaims, err := VerifySessionJWTAllowExpired("secret", originalToken)
+	if err != nil {
+		t.Fatalf("VerifySessionJWTAllowExpired returned error: %v", err)
+	}
+
+	refreshedToken, err := IssueSessionJWTForSession("secret", originalClaims, 3600)
+	if err != nil {
+		t.Fatalf("IssueSessionJWTForSession returned error: %v", err)
+	}
+
+	refreshedClaims, err := VerifySessionJWTAllowExpired("secret", refreshedToken)
+	if err != nil {
+		t.Fatalf("VerifySessionJWTAllowExpired returned error: %v", err)
+	}
+
+	if refreshedClaims.SessionVersion != originalClaims.SessionVersion+1 {
+		t.Fatalf("SessionVersion mismatch: got %d want %d", refreshedClaims.SessionVersion, originalClaims.SessionVersion+1)
+	}
 }

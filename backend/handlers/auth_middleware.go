@@ -8,6 +8,7 @@ import (
 	"backend/services"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const (
@@ -20,26 +21,34 @@ type Claims map[string]any
 
 func extractBearerToken(h string) string {
 	parts := strings.Fields(strings.TrimSpace(h))
-	if len(parts) != 2 { return "" }
-	if !strings.EqualFold(parts[0], "Bearer") { return "" }
+	if len(parts) != 2 {
+		return ""
+	}
+	if !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
 	return strings.TrimSpace(parts[1])
 }
 
 func accountIDFromContext(c *gin.Context) string {
 	v, ok := c.Get(authAccountIDContextKey)
-	if !ok { return "" }
+	if !ok {
+		return ""
+	}
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
 }
 
 func usernameFromContext(c *gin.Context) string {
 	v, ok := c.Get(authUsernameContextKey)
-	if !ok { return "" }
+	if !ok {
+		return ""
+	}
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
 }
 
-func RequireSessionAuth(authSecret string) gin.HandlerFunc {
+func RequireSessionAuth(authSecret string, logoutHandlesColl *mongo.Collection) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		bearerToken := extractBearerToken(c.GetHeader("Authorization"))
 		if bearerToken == "" {
@@ -50,6 +59,12 @@ func RequireSessionAuth(authSecret string) gin.HandlerFunc {
 		claims, err := services.VerifySessionJWT(authSecret, bearerToken)
 		if err != nil {
 			log.Printf("session auth failed: %v", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			c.Abort()
+			return
+		}
+		if revocationErr := sessionLogoutHandleActive(c.Request.Context(), logoutHandlesColl, claims); revocationErr != nil {
+			log.Printf("session auth rejected by revoked logout handle: %v", revocationErr)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			c.Abort()
 			return

@@ -2,6 +2,7 @@ export type AdminSession = {
   sub: string;
   username: string;
   accountId: string;
+  sessionVersion?: number;
   exp: number;
 };
 

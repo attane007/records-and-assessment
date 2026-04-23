@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"backend/services"
 
 	"github.com/gin-gonic/gin"
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -39,6 +41,8 @@ type authErrorDetail struct {
 	Retryable bool   `json:"retryable"`
 	RequestID string `json:"request_id,omitempty"`
 }
+
+const backchannelLogoutEventClaim = "http://schemas.openid.net/event/backchannel-logout"
 
 // NewAuthHandler returns a new AuthHandler.
 func NewAuthHandler(logoutHandlesColl *mongo.Collection) *AuthHandler {
@@ -107,6 +111,20 @@ func authError(c *gin.Context, status int, code, message, reason string, retryab
 		},
 	}
 	c.JSON(status, payload)
+}
+
+func sessionLogoutHandleActive(ctx context.Context, logoutHandlesColl *mongo.Collection, claims *services.SessionClaims) error {
+	if logoutHandlesColl == nil || claims == nil {
+		return nil
+	}
+
+	handleID := strings.TrimSpace(claims.LogoutHandleID)
+	if handleID == "" {
+		return nil
+	}
+
+	_, err := services.GetLogoutHandleByID(ctx, logoutHandlesColl, handleID)
+	return err
 }
 
 func (h *AuthHandler) frontendURL() string {
@@ -396,6 +414,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 			return
 		}
 	}
+	if err := sessionLogoutHandleActive(c.Request.Context(), h.logoutHandlesColl, claims); err != nil {
+		log.Printf("refresh blocked by revoked logout handle: %v", err)
+		authError(c, http.StatusUnauthorized, "invalid_grant", "Session has been revoked", "session_revoked", false)
+		return
+	}
 
 	const expiresIn = 8 * 3600
 	newToken, err := services.IssueSessionJWTForSession(secret, claims, expiresIn)
@@ -446,6 +469,13 @@ func (h *AuthHandler) Session(c *gin.Context) {
 
 	claims, err := services.VerifySessionJWT(secret, bearerToken)
 	if err == nil {
+		if revocationErr := sessionLogoutHandleActive(c.Request.Context(), h.logoutHandlesColl, claims); revocationErr != nil {
+			log.Printf("session rejected by revoked logout handle: %v", revocationErr)
+			setNoStoreHeaders(c)
+			c.JSON(http.StatusOK, gin.H{"authenticated": false})
+			return
+		}
+
 		setNoStoreHeaders(c)
 		c.JSON(http.StatusOK, gin.H{
 			"authenticated": true,
@@ -464,6 +494,12 @@ func (h *AuthHandler) Session(c *gin.Context) {
 
 	claims, allowErr := services.VerifySessionJWTAllowExpired(secret, bearerToken)
 	if allowErr != nil {
+		setNoStoreHeaders(c)
+		c.JSON(http.StatusOK, gin.H{"authenticated": false})
+		return
+	}
+	if revocationErr := sessionLogoutHandleActive(c.Request.Context(), h.logoutHandlesColl, claims); revocationErr != nil {
+		log.Printf("session refresh blocked by revoked logout handle: %v", revocationErr)
 		setNoStoreHeaders(c)
 		c.JSON(http.StatusOK, gin.H{"authenticated": false})
 		return
@@ -592,7 +628,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 // GET /auth/frontchannel-logout — clear local state and broadcast global-logout signal.
+// POST /auth/frontchannel-logout — accept a backchannel logout_token and revoke local handles by sid.
 func (h *AuthHandler) FrontchannelLogout(c *gin.Context) {
+	if c.Request != nil && c.Request.Method == http.MethodPost {
+		h.BackchannelLogout(c)
+		return
+	}
+
 	isProd := os.Getenv("GO_ENV") == "production"
 	setNoStoreHeaders(c)
 	c.SetCookie("oidc_tx", "", -1, "/", "", isProd, true)
@@ -621,6 +663,98 @@ func (h *AuthHandler) FrontchannelLogout(c *gin.Context) {
 </html>`
 
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html.UnescapeString(htmlContent)))
+}
+
+// POST /auth/frontchannel-logout — receive backchannel logout from the OP.
+func (h *AuthHandler) BackchannelLogout(c *gin.Context) {
+	secret := strings.TrimSpace(os.Getenv("OIDC_CLIENT_SECRET"))
+	clientID := strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
+	issuer := strings.TrimSpace(os.Getenv("OIDC_BASE_URL"))
+	if issuer == "" {
+		issuer = strings.TrimSpace(os.Getenv("OIDC_ISSUER"))
+	}
+	if secret == "" || clientID == "" || issuer == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "backchannel logout is not configured"})
+		return
+	}
+	if h.logoutHandlesColl == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "logout handle collection is not configured"})
+		return
+	}
+
+	if err := c.Request.ParseForm(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid logout token payload"})
+		return
+	}
+
+	rawLogoutToken := strings.TrimSpace(c.Request.FormValue("logout_token"))
+	if rawLogoutToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "logout_token is required"})
+		return
+	}
+
+	claims, err := verifyBackchannelLogoutToken(secret, issuer, clientID, rawLogoutToken)
+	if err != nil {
+		log.Printf("backchannel logout token rejected: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid logout token"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+	if err := services.RevokeLogoutHandlesBySID(ctx, h.logoutHandlesColl, claims.Sid); err != nil && !errors.Is(err, services.ErrLogoutHandleNotFound) {
+		log.Printf("backchannel logout revoke failed for sid=%s: %v", claims.Sid, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke logout handle"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Status(http.StatusNoContent)
+}
+
+func verifyBackchannelLogoutToken(secret, issuer, audience, rawToken string) (*backchannelLogoutTokenClaims, error) {
+	trimmedToken := strings.TrimSpace(rawToken)
+	if trimmedToken == "" {
+		return nil, fmt.Errorf("logout token is required")
+	}
+
+	claims := &backchannelLogoutTokenClaims{}
+	token, err := jwtv5.ParseWithClaims(
+		trimmedToken,
+		claims,
+		func(token *jwtv5.Token) (any, error) {
+			if token.Method == nil || token.Method.Alg() != jwtv5.SigningMethodHS256.Alg() {
+				return nil, fmt.Errorf("unexpected logout token signing method: %v", token.Header["alg"])
+			}
+			return []byte(secret), nil
+		},
+		jwtv5.WithIssuer(strings.TrimSpace(issuer)),
+		jwtv5.WithAudience(strings.TrimSpace(audience)),
+		jwtv5.WithValidMethods([]string{jwtv5.SigningMethodHS256.Alg()}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if token == nil || !token.Valid {
+		return nil, fmt.Errorf("invalid logout token")
+	}
+	if strings.TrimSpace(claims.Sid) == "" {
+		return nil, fmt.Errorf("logout token missing sid")
+	}
+	if len(claims.Events) == 0 {
+		return nil, fmt.Errorf("logout token missing events claim")
+	}
+	if _, ok := claims.Events[backchannelLogoutEventClaim]; !ok {
+		return nil, fmt.Errorf("logout token missing backchannel logout event")
+	}
+	return claims, nil
+}
+
+type backchannelLogoutTokenClaims struct {
+	jwtv5.RegisteredClaims
+	Sid    string                    `json:"sid,omitempty"`
+	Events map[string]map[string]any `json:"events,omitempty"`
 }
 
 // ─── Private helpers ───────────────────────────────────────────────────────────

@@ -241,6 +241,7 @@ type sessionJWTPayload struct {
 	Sub            string `json:"sub"`
 	Username       string `json:"username"`
 	AccountID      string `json:"accountId"`
+	SessionVersion int64  `json:"sessionVersion"`
 	Exp            int64  `json:"exp"`
 	Iat            int64  `json:"iat,omitempty"`
 	SessionExp     int64  `json:"sessionExp,omitempty"`
@@ -262,6 +263,7 @@ type SessionClaims struct {
 	Sub            string
 	Username       string
 	AccountID      string
+	SessionVersion int64
 	Exp            int64
 	Iat            int64
 	SessionExp     int64
@@ -280,6 +282,7 @@ func issueSessionJWT(
 	issuedAt int64,
 	sessionExp int64,
 	logoutHandleID string,
+	sessionVersion int64,
 	expiresIn int,
 ) (string, error) {
 	if expiresIn <= 0 {
@@ -305,6 +308,7 @@ func issueSessionJWT(
 		Sub:            sub,
 		Username:       username,
 		AccountID:      accountID,
+		SessionVersion: sessionVersion,
 		Exp:            accessExp,
 		Iat:            issuedAt,
 		SessionExp:     sessionExp,
@@ -362,7 +366,7 @@ func verifyHMACJWT(authSecret, rawToken string) (string, error) {
 func IssueSessionJWT(authSecret, sub, username, accountID string, expiresIn int) (string, error) {
 	now := time.Now().Unix()
 	sessionExp := now + defaultSessionMaxAgeSeconds
-	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, "", expiresIn)
+	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, "", 1, expiresIn)
 }
 
 // IssueSessionJWTWithLogoutHandle creates an HMAC-SHA256 signed session JWT and preserves
@@ -370,7 +374,7 @@ func IssueSessionJWT(authSecret, sub, username, accountID string, expiresIn int)
 func IssueSessionJWTWithLogoutHandle(authSecret, sub, username, accountID, logoutHandleID string, expiresIn int) (string, error) {
 	now := time.Now().Unix()
 	sessionExp := now + defaultSessionMaxAgeSeconds
-	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, logoutHandleID, expiresIn)
+	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, logoutHandleID, 1, expiresIn)
 }
 
 // IssueSessionJWTForSession creates a new access token while keeping the original
@@ -379,12 +383,17 @@ func IssueSessionJWTForSession(authSecret string, claims *SessionClaims, expires
 	if claims == nil {
 		return "", fmt.Errorf("missing session claims")
 	}
+	nextSessionVersion := claims.SessionVersion + 1
+	if nextSessionVersion <= 0 {
+		nextSessionVersion = 1
+	}
+
 	now := time.Now().Unix()
 	sessionExp := normalizeSessionExp(claims.Exp, claims.SessionExp)
 	if sessionExp <= now {
 		return "", fmt.Errorf("session expired")
 	}
-	return issueSessionJWT(authSecret, claims.Sub, claims.Username, claims.AccountID, now, sessionExp, claims.LogoutHandleID, expiresIn)
+	return issueSessionJWT(authSecret, claims.Sub, claims.Username, claims.AccountID, now, sessionExp, claims.LogoutHandleID, nextSessionVersion, expiresIn)
 }
 
 // IssueTransactionJWT creates an HMAC-SHA256 signed OIDC transaction JWT.
@@ -424,6 +433,7 @@ func VerifySessionJWTAllowExpired(authSecret, rawToken string) (*SessionClaims, 
 		Sub:            payload.Sub,
 		Username:       payload.Username,
 		AccountID:      payload.AccountID,
+		SessionVersion: payload.SessionVersion,
 		Exp:            payload.Exp,
 		Iat:            payload.Iat,
 		SessionExp:     normalizeSessionExp(payload.Exp, payload.SessionExp),

@@ -151,6 +151,39 @@ export async function forceRefreshSessionAccessToken(
   return ensureFreshAccessToken(payload, true);
 }
 
+function resolveBackendURL(): string {
+  return (
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    "http://localhost:8080"
+  ).replace(/\/$/, "");
+}
+
+async function validateSessionWithBackend(accessToken: string): Promise<boolean | null> {
+  if (!accessToken) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${resolveBackendURL()}/auth/session`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = (await response.json().catch(() => null)) as { authenticated?: boolean } | null;
+    return payload?.authenticated === true;
+  } catch {
+    return null;
+  }
+}
+
 export async function updateSessionToken(
   payload: SessionPayload,
   expiresIn?: number
@@ -179,7 +212,17 @@ export async function getSessionFromCookies(): Promise<SessionPayload | null> {
   if (!token) return null;
   const session = await verifySessionToken(token);
   if (!session) return null;
-  return ensureFreshAccessToken(session);
+  const freshSession = await ensureFreshAccessToken(session);
+  if (!freshSession) {
+    return null;
+  }
+
+  const backendStatus = freshSession.accessToken ? await validateSessionWithBackend(freshSession.accessToken) : null;
+  if (backendStatus === false) {
+    return null;
+  }
+
+  return freshSession;
 }
 
 export async function getSessionFromRequest(req: Request): Promise<SessionPayload | null> {

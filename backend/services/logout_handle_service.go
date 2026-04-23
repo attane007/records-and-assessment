@@ -269,3 +269,28 @@ func RevokeLogoutHandleByID(ctx context.Context, coll *mongo.Collection, handleI
 	}
 	return nil
 }
+
+func RevokeLogoutHandlesBySID(ctx context.Context, coll *mongo.Collection, sid string) error {
+	if coll == nil {
+		return fmt.Errorf("logout handle collection is not configured")
+	}
+
+	normalizedSID := strings.TrimSpace(sid)
+	if normalizedSID == "" {
+		return ErrLogoutHandleNotFound
+	}
+
+	now := time.Now()
+	result, err := coll.UpdateMany(
+		ctx,
+		bson.M{"sid": normalizedSID},
+		bson.M{"$set": bson.M{"revoked_at": now, "updated_at": now}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return ErrLogoutHandleNotFound
+	}
+	return nil
+}
