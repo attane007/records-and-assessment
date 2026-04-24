@@ -6,8 +6,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 const GLOBAL_LOGOUT_MARKER = "ra_global_logout_at";
 const SESSION_UPDATE_MARKER = "ra_session_updated_at";
 const SILENT_SYNC_LAST_ATTEMPT_KEY = "ra_admin_silent_sync_last_attempt_at";
+const LAST_REFRESH_TIME_KEY = "ra_last_refresh_time_at";
+const LAST_SESSION_VERSION_KEY = "ra_last_session_version";
 const SILENT_SYNC_COOLDOWN_MS = 30 * 1000;
 const SILENT_SYNC_MIN_HIDDEN_MS = 5 * 1000;
+const REFRESH_DEBOUNCE_MS = 2 * 1000;
+const SESSION_CHECK_INTERVAL_MS = 30 * 1000; // Check for account changes every 30 seconds
 
 function isAdminPath(pathname: string) {
   return pathname.startsWith("/admin");
@@ -19,6 +23,83 @@ export default function AuthSync() {
   const searchParams = useSearchParams();
   const handledAuthEventRef = useRef(false);
   const hiddenAtRef = useRef<number | null>(null);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isRefreshingRef = useRef(false);
+
+  const debounceRefresh = (reason: string) => {
+    if (isRefreshingRef.current) {
+      return;
+    }
+
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+
+    refreshTimeoutRef.current = setTimeout(() => {
+      try {
+        const now = Date.now();
+        const lastRefreshRaw = window.localStorage.getItem(LAST_REFRESH_TIME_KEY);
+        const lastRefresh = Number.parseInt(lastRefreshRaw || "0", 10);
+        
+        // Prevent refreshes within REFRESH_DEBOUNCE_MS
+        if (Number.isFinite(lastRefresh) && now - lastRefresh < REFRESH_DEBOUNCE_MS) {
+          return;
+        }
+
+        isRefreshingRef.current = true;
+        window.localStorage.setItem(LAST_REFRESH_TIME_KEY, String(now));
+        router.refresh();
+      } catch {
+        // ignore errors
+      } finally {
+        isRefreshingRef.current = false;
+        refreshTimeoutRef.current = null;
+      }
+    }, REFRESH_DEBOUNCE_MS);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Periodic check for account/session changes (backchannel session events)
+  useEffect(() => {
+    const shouldProtectPage = isAdminPath(pathname);
+    if (!shouldProtectPage) {
+      return;
+    }
+
+    const checkSessionUpdates = async () => {
+      try {
+        const response = await fetch("/api/auth/session-update-check", {
+          cache: "no-store",
+          headers: { "Accept": "application/json" },
+        });
+        
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json().catch(() => null)) as {
+          need_refresh?: boolean;
+          reason?: string;
+        } | null;
+
+        if (data?.need_refresh) {
+          debounceRefresh("session_update_check");
+        }
+      } catch {
+        // Silently ignore errors in session check
+      }
+    };
+
+    const intervalId = setInterval(checkSessionUpdates, SESSION_CHECK_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [pathname]);
 
   useEffect(() => {
     const shouldProtectPage = isAdminPath(pathname);
@@ -67,7 +148,7 @@ export default function AuthSync() {
         const nextUrl = cleanedParams.toString() ? `${pathname}?${cleanedParams.toString()}` : pathname;
         router.replace(nextUrl);
         if (shouldProtectPage) {
-          router.refresh();
+          debounceRefresh("auth_event");
         }
       }
     }
@@ -86,7 +167,7 @@ export default function AuthSync() {
       if (event.key === SESSION_UPDATE_MARKER && event.newValue) {
         window.dispatchEvent(new Event("gauth:session-updated"));
         if (shouldProtectPage) {
-          router.refresh();
+          debounceRefresh("storage_marker");
         }
       }
     };
@@ -123,14 +204,14 @@ export default function AuthSync() {
     };
 
     window.addEventListener("storage", handleStorage);
-    window.addEventListener("gauth:global-logout", handleGlobalLogout as EventListener);
+    window.addEventListener("gauth:global-logout", handleAuthInvalid as EventListener);
     window.addEventListener("gauth:auth-invalid", handleAuthInvalid as EventListener);
     window.addEventListener("focus", handleWindowFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("gauth:global-logout", handleGlobalLogout as EventListener);
+      window.removeEventListener("gauth:global-logout", handleAuthInvalid as EventListener);
       window.removeEventListener("gauth:auth-invalid", handleAuthInvalid as EventListener);
       window.removeEventListener("focus", handleWindowFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
