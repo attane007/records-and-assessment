@@ -26,6 +26,13 @@ export default function AuthSync() {
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isRefreshingRef = useRef(false);
 
+  type SessionCheckResponse = {
+    need_refresh?: boolean;
+    reason?: string;
+    local_version?: number;
+    backend_version?: number;
+  };
+
   const debounceRefresh = (reason: string) => {
     if (isRefreshingRef.current) {
       return;
@@ -84,12 +91,29 @@ export default function AuthSync() {
           return;
         }
 
-        const data = (await response.json().catch(() => null)) as {
-          need_refresh?: boolean;
-          reason?: string;
-        } | null;
+        const data = (await response.json().catch(() => null)) as SessionCheckResponse | null;
+        if (!data?.need_refresh) {
+          return;
+        }
 
-        if (data?.need_refresh) {
+        // Prevent refresh loops caused by transient backend failures.
+        if (data.reason === "backend_error") {
+          return;
+        }
+
+        if (data.reason === "session_version_mismatch") {
+          const backendVersion = data.backend_version;
+          if (Number.isFinite(backendVersion) && (backendVersion ?? 0) > 0) {
+            const versionMarker = String(Math.floor(backendVersion as number));
+            const lastVersion = window.localStorage.getItem(LAST_SESSION_VERSION_KEY);
+            if (lastVersion === versionMarker) {
+              return;
+            }
+            window.localStorage.setItem(LAST_SESSION_VERSION_KEY, versionMarker);
+          }
+        }
+
+        if (data.need_refresh) {
           debounceRefresh("session_update_check");
         }
       } catch {
@@ -99,7 +123,7 @@ export default function AuthSync() {
 
     const intervalId = setInterval(checkSessionUpdates, SESSION_CHECK_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [pathname]);
+  }, [pathname, router]);
 
   useEffect(() => {
     const shouldProtectPage = isAdminPath(pathname);
@@ -204,14 +228,14 @@ export default function AuthSync() {
     };
 
     window.addEventListener("storage", handleStorage);
-    window.addEventListener("gauth:global-logout", handleAuthInvalid as EventListener);
+    window.addEventListener("gauth:global-logout", handleGlobalLogout as EventListener);
     window.addEventListener("gauth:auth-invalid", handleAuthInvalid as EventListener);
     window.addEventListener("focus", handleWindowFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("gauth:global-logout", handleAuthInvalid as EventListener);
+      window.removeEventListener("gauth:global-logout", handleGlobalLogout as EventListener);
       window.removeEventListener("gauth:auth-invalid", handleAuthInvalid as EventListener);
       window.removeEventListener("focus", handleWindowFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
