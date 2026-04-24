@@ -64,10 +64,13 @@ function normalizeRequestId(value: unknown): string {
 function normalizeRequestsResponse(value: unknown, fallbackPage: number, fallbackLimit: number): RequestsResponse | null {
   if (!isRecord(value)) return null;
 
-  const requestsRaw = value.requests;
-  if (!Array.isArray(requestsRaw)) return null;
+  const requestsRaw = (value as Record<string, unknown>).requests;
+  // Accept either an array or null/undefined for empty-state. If it's null/undefined,
+  // treat as empty array. If it's present but not an array, consider it invalid.
+  const requestsArray = requestsRaw == null ? [] : (Array.isArray(requestsRaw) ? requestsRaw : null);
+  if (requestsArray === null) return null;
 
-  const requests = requestsRaw
+  const requests = requestsArray
     .map((item) => {
       if (!isRecord(item)) return null;
       const id = normalizeRequestId(item.id ?? item._id);

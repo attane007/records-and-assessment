@@ -184,6 +184,10 @@ func GetRequests(ctx context.Context, coll *mongo.Collection, page, limit int, a
 	if err := cursor.All(ctx, &requests); err != nil {
 		return nil, 0, err
 	}
+	// Ensure we return an empty slice instead of nil so JSON encodes as [] not null
+	if requests == nil {
+		requests = make([]RequestRecord, 0)
+	}
 
 	return requests, total, nil
 }
