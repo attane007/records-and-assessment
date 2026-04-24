@@ -95,7 +95,7 @@ export default function AuthSync() {
       }
     }
 
-    attemptSilentSessionSync(true);
+    attemptSilentSessionSync();
 
     const handleStorage = (event: StorageEvent) => {
       if (event.key === GLOBAL_LOGOUT_MARKER && event.newValue) {
