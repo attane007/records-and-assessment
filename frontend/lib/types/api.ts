@@ -2,6 +2,11 @@ export type AdminSession = {
   sub: string;
   username: string;
   accountId: string;
+  authSubject?: string;
+  tenantId?: string;
+  displayName?: string;
+  scope?: string;
+  scopes?: string[];
   sessionVersion?: number;
   exp: number;
 };

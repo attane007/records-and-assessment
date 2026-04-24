@@ -49,10 +49,31 @@ export async function GET(request: Request) {
         sub: string;
         username: string;
         accountId: string;
+        authSubject?: string;
+        tenantId?: string;
+        displayName?: string;
+        scope?: string;
+        scopes?: string[];
         sessionVersion?: number;
         exp: number;
     }>(token);
     if (!claims) return fail('invalid_token');
+
+    const scopes = Array.isArray(claims.scopes)
+        ? claims.scopes.filter((scope): scope is string => typeof scope === 'string' && scope.trim() !== '').map((scope) => scope.trim())
+        : [];
+    const displayName = typeof claims.displayName === 'string' && claims.displayName.trim() !== ''
+        ? claims.displayName.trim()
+        : claims.username;
+    const authSubject = typeof claims.authSubject === 'string' && claims.authSubject.trim() !== ''
+        ? claims.authSubject.trim()
+        : claims.accountId;
+    const tenantId = typeof claims.tenantId === 'string' && claims.tenantId.trim() !== ''
+        ? claims.tenantId.trim()
+        : authSubject;
+    const scope = typeof claims.scope === 'string' && claims.scope.trim() !== ''
+        ? claims.scope.trim()
+        : scopes.join(' ');
 
     // Build the frontend session; accessToken = backend JWT used as Bearer in proxy requests.
     const now = Math.floor(Date.now() / 1000);
@@ -60,8 +81,13 @@ export async function GET(request: Request) {
     const sessionExp = now + sessionMaxAge;
     const sessionPayload = {
         sub: claims.sub,
-        username: claims.username,
+        username: claims.username || displayName || claims.accountId,
         accountId: claims.accountId,
+        authSubject,
+        tenantId,
+        displayName,
+        scope,
+        scopes,
         exp: sessionExp,
         accessToken: token,
         accessTokenExp: claims.exp,

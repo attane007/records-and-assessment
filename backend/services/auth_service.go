@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,8 @@ const (
 	defaultAccessTokenTTLSeconds = 8 * 3600
 	defaultSessionMaxAgeSeconds  = 7 * 24 * 3600
 )
+
+var defaultSessionScopes = []string{"openid", "profile", "email"}
 
 // DefaultSessionExpiry returns the default absolute session expiry.
 func DefaultSessionExpiry(now time.Time) time.Time {
@@ -235,17 +238,22 @@ type jwtSessionHeader struct {
 	Typ string `json:"typ"`
 }
 
-// sessionJWTPayload — field order matches the TypeScript SessionPayload insertion order
-// so the JSON encoding is byte-for-byte identical to what frontend's createSessionToken emits.
+// sessionJWTPayload keeps the session token shape stable for the frontend callback
+// route and refresh flow.
 type sessionJWTPayload struct {
-	Sub            string `json:"sub"`
-	Username       string `json:"username"`
-	AccountID      string `json:"accountId"`
-	SessionVersion int64  `json:"sessionVersion"`
-	Exp            int64  `json:"exp"`
-	Iat            int64  `json:"iat,omitempty"`
-	SessionExp     int64  `json:"sessionExp,omitempty"`
-	LogoutHandleID string `json:"logoutHandleId,omitempty"`
+	Sub            string   `json:"sub"`
+	Username       string   `json:"username"`
+	AccountID      string   `json:"accountId"`
+	AuthSubject    string   `json:"authSubject,omitempty"`
+	TenantID       string   `json:"tenantId,omitempty"`
+	DisplayName    string   `json:"displayName,omitempty"`
+	Scope          string   `json:"scope,omitempty"`
+	Scopes         []string `json:"scopes,omitempty"`
+	SessionVersion int64    `json:"sessionVersion"`
+	Exp            int64    `json:"exp"`
+	Iat            int64    `json:"iat,omitempty"`
+	SessionExp     int64    `json:"sessionExp,omitempty"`
+	LogoutHandleID string   `json:"logoutHandleId,omitempty"`
 }
 
 // OIDCTransactionPayload is signed and stored in the oidc_tx cookie during the auth flow.
@@ -263,11 +271,27 @@ type SessionClaims struct {
 	Sub            string
 	Username       string
 	AccountID      string
+	AuthSubject    string
+	TenantID       string
+	DisplayName    string
+	Scope          string
+	Scopes         []string
 	SessionVersion int64
 	Exp            int64
 	Iat            int64
 	SessionExp     int64
 	LogoutHandleID string
+}
+
+type sessionContext struct {
+	Subject     string
+	Username    string
+	AccountID   string
+	AuthSubject string
+	TenantID    string
+	DisplayName string
+	Scope       string
+	Scopes      []string
 }
 
 func normalizeSessionExp(exp, sessionExp int64) int64 {
@@ -277,14 +301,145 @@ func normalizeSessionExp(exp, sessionExp int64) int64 {
 	return exp
 }
 
+func canonicalSessionScopes(scopes []string) []string {
+	source := scopes
+	if len(source) == 0 {
+		source = defaultSessionScopes
+	}
+
+	result := make([]string, 0, len(source))
+	seen := make(map[string]struct{}, len(source))
+	for _, scope := range source {
+		normalized := strings.TrimSpace(scope)
+		if normalized == "" {
+			continue
+		}
+		if _, exists := seen[normalized]; exists {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		result = append(result, normalized)
+	}
+
+	if len(result) == 0 {
+		return append([]string(nil), defaultSessionScopes...)
+	}
+
+	return result
+}
+
+func canonicalSessionContextFromClaims(claims *SessionClaims) sessionContext {
+	if claims == nil {
+		return sessionContext{}
+	}
+
+	scopes := append([]string(nil), claims.Scopes...)
+	if len(scopes) == 0 && strings.TrimSpace(claims.Scope) != "" {
+		scopes = strings.Fields(claims.Scope)
+	}
+
+	ctx := sessionContext{
+		Subject:     strings.TrimSpace(claims.Sub),
+		Username:    strings.TrimSpace(claims.Username),
+		AccountID:   strings.TrimSpace(claims.AccountID),
+		AuthSubject: strings.TrimSpace(claims.AuthSubject),
+		TenantID:    strings.TrimSpace(claims.TenantID),
+		DisplayName: strings.TrimSpace(claims.DisplayName),
+		Scope:       strings.TrimSpace(claims.Scope),
+		Scopes:      canonicalSessionScopes(scopes),
+	}
+
+	if ctx.Subject == "" {
+		ctx.Subject = ctx.AccountID
+	}
+	if ctx.Username == "" {
+		ctx.Username = ctx.DisplayName
+	}
+	if ctx.Username == "" {
+		ctx.Username = ctx.AuthSubject
+	}
+	if ctx.AccountID == "" {
+		ctx.AccountID = ctx.AuthSubject
+	}
+	if ctx.AuthSubject == "" {
+		ctx.AuthSubject = ctx.AccountID
+	}
+	if ctx.TenantID == "" {
+		ctx.TenantID = ctx.AuthSubject
+	}
+	if ctx.DisplayName == "" {
+		ctx.DisplayName = ctx.Username
+	}
+	if ctx.DisplayName == "" {
+		ctx.DisplayName = ctx.AuthSubject
+	}
+	if ctx.Scope == "" && len(ctx.Scopes) > 0 {
+		ctx.Scope = strings.Join(ctx.Scopes, " ")
+	}
+
+	return ctx
+}
+
+func canonicalSessionContextFromLogin(subject, username, accountID string) sessionContext {
+	ctx := sessionContext{
+		Subject:     strings.TrimSpace(subject),
+		Username:    strings.TrimSpace(username),
+		AccountID:   strings.TrimSpace(accountID),
+		AuthSubject: strings.TrimSpace(accountID),
+		TenantID:    strings.TrimSpace(accountID),
+		DisplayName: strings.TrimSpace(username),
+		Scopes:      canonicalSessionScopes(nil),
+	}
+
+	if ctx.Subject == "" {
+		ctx.Subject = ctx.AccountID
+	}
+	if ctx.Username == "" {
+		ctx.Username = ctx.DisplayName
+	}
+	if ctx.Username == "" {
+		ctx.Username = ctx.AuthSubject
+	}
+	if ctx.AccountID == "" {
+		ctx.AccountID = ctx.Subject
+	}
+	if ctx.AuthSubject == "" {
+		ctx.AuthSubject = ctx.AccountID
+	}
+	if ctx.TenantID == "" {
+		ctx.TenantID = ctx.AuthSubject
+	}
+	if ctx.DisplayName == "" {
+		ctx.DisplayName = ctx.Username
+	}
+	if ctx.DisplayName == "" {
+		ctx.DisplayName = ctx.AuthSubject
+	}
+	ctx.Scope = strings.Join(ctx.Scopes, " ")
+
+	return ctx
+}
+
 func issueSessionJWT(
-	authSecret, sub, username, accountID string,
+	authSecret string,
+	ctx sessionContext,
 	issuedAt int64,
 	sessionExp int64,
 	logoutHandleID string,
 	sessionVersion int64,
 	expiresIn int,
 ) (string, error) {
+	ctx = canonicalSessionContextFromClaims(&SessionClaims{
+		Sub:         ctx.Subject,
+		Username:    ctx.Username,
+		AccountID:   ctx.AccountID,
+		AuthSubject: ctx.AuthSubject,
+		TenantID:    ctx.TenantID,
+		DisplayName: ctx.DisplayName,
+		Scope:       ctx.Scope,
+		Scopes:      ctx.Scopes,
+	})
+
 	if expiresIn <= 0 {
 		expiresIn = defaultAccessTokenTTLSeconds
 	}
@@ -304,10 +459,16 @@ func issueSessionJWT(
 	}
 
 	header := jwtSessionHeader{Alg: "HS256", Typ: "JWT"}
+	scopes := canonicalSessionScopes(ctx.Scopes)
 	payload := sessionJWTPayload{
-		Sub:            sub,
-		Username:       username,
-		AccountID:      accountID,
+		Sub:            ctx.Subject,
+		Username:       ctx.Username,
+		AccountID:      ctx.AccountID,
+		AuthSubject:    ctx.AuthSubject,
+		TenantID:       ctx.TenantID,
+		DisplayName:    ctx.DisplayName,
+		Scope:          strings.Join(scopes, " "),
+		Scopes:         scopes,
 		SessionVersion: sessionVersion,
 		Exp:            accessExp,
 		Iat:            issuedAt,
@@ -331,6 +492,24 @@ func computeHMAC(signingInput, authSecret string) []byte {
 	return mac.Sum(nil)
 }
 
+func uniqueNonEmpty(values ...string) []string {
+	result := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	return result
+}
+
 func buildJWT(header, payload any, authSecret string) (string, error) {
 	headerB64, err := marshalBase64URL(header)
 	if err != nil {
@@ -351,22 +530,24 @@ func verifyHMACJWT(authSecret, rawToken string) (string, error) {
 		return "", fmt.Errorf("invalid token format")
 	}
 	signingInput := parts[0] + "." + parts[1]
-	expected := computeHMAC(signingInput, authSecret)
 	provided, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
 		return "", fmt.Errorf("invalid signature encoding")
 	}
-	if !hmac.Equal(expected, provided) {
-		return "", fmt.Errorf("invalid signature")
+	for _, candidateSecret := range uniqueNonEmpty(authSecret, os.Getenv("AUTH_SECRET_PREVIOUS")) {
+		expected := computeHMAC(signingInput, candidateSecret)
+		if hmac.Equal(expected, provided) {
+			return parts[1], nil
+		}
 	}
-	return parts[1], nil
+	return "", fmt.Errorf("invalid signature")
 }
 
 // IssueSessionJWT creates an HMAC-SHA256 signed session JWT.
 func IssueSessionJWT(authSecret, sub, username, accountID string, expiresIn int) (string, error) {
 	now := time.Now().Unix()
 	sessionExp := now + defaultSessionMaxAgeSeconds
-	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, "", 1, expiresIn)
+	return issueSessionJWT(authSecret, canonicalSessionContextFromLogin(sub, username, accountID), now, sessionExp, "", 1, expiresIn)
 }
 
 // IssueSessionJWTWithLogoutHandle creates an HMAC-SHA256 signed session JWT and preserves
@@ -374,7 +555,7 @@ func IssueSessionJWT(authSecret, sub, username, accountID string, expiresIn int)
 func IssueSessionJWTWithLogoutHandle(authSecret, sub, username, accountID, logoutHandleID string, expiresIn int) (string, error) {
 	now := time.Now().Unix()
 	sessionExp := now + defaultSessionMaxAgeSeconds
-	return issueSessionJWT(authSecret, sub, username, accountID, now, sessionExp, logoutHandleID, 1, expiresIn)
+	return issueSessionJWT(authSecret, canonicalSessionContextFromLogin(sub, username, accountID), now, sessionExp, logoutHandleID, 1, expiresIn)
 }
 
 // IssueSessionJWTForSession creates a new access token while keeping the original
@@ -393,7 +574,7 @@ func IssueSessionJWTForSession(authSecret string, claims *SessionClaims, expires
 	if sessionExp <= now {
 		return "", fmt.Errorf("session expired")
 	}
-	return issueSessionJWT(authSecret, claims.Sub, claims.Username, claims.AccountID, now, sessionExp, claims.LogoutHandleID, nextSessionVersion, expiresIn)
+	return issueSessionJWT(authSecret, canonicalSessionContextFromClaims(claims), now, sessionExp, claims.LogoutHandleID, nextSessionVersion, expiresIn)
 }
 
 // IssueTransactionJWT creates an HMAC-SHA256 signed OIDC transaction JWT.
@@ -429,15 +610,39 @@ func VerifySessionJWTAllowExpired(authSecret, rawToken string) (*SessionClaims, 
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		return nil, fmt.Errorf("invalid payload json")
 	}
+	scopes := append([]string(nil), payload.Scopes...)
+	if len(scopes) == 0 && strings.TrimSpace(payload.Scope) != "" {
+		scopes = strings.Fields(payload.Scope)
+	}
 	claims := &SessionClaims{
-		Sub:            payload.Sub,
-		Username:       payload.Username,
-		AccountID:      payload.AccountID,
+		Sub:            strings.TrimSpace(payload.Sub),
+		Username:       strings.TrimSpace(payload.Username),
+		AccountID:      strings.TrimSpace(payload.AccountID),
+		AuthSubject:    strings.TrimSpace(payload.AuthSubject),
+		TenantID:       strings.TrimSpace(payload.TenantID),
+		DisplayName:    strings.TrimSpace(payload.DisplayName),
+		Scope:          strings.TrimSpace(payload.Scope),
+		Scopes:         canonicalSessionScopes(scopes),
 		SessionVersion: payload.SessionVersion,
 		Exp:            payload.Exp,
 		Iat:            payload.Iat,
 		SessionExp:     normalizeSessionExp(payload.Exp, payload.SessionExp),
 		LogoutHandleID: strings.TrimSpace(payload.LogoutHandleID),
+	}
+	if claims.AuthSubject == "" {
+		claims.AuthSubject = claims.AccountID
+	}
+	if claims.TenantID == "" {
+		claims.TenantID = claims.AuthSubject
+	}
+	if claims.DisplayName == "" {
+		claims.DisplayName = claims.Username
+	}
+	if claims.DisplayName == "" {
+		claims.DisplayName = claims.AuthSubject
+	}
+	if claims.Scope == "" && len(claims.Scopes) > 0 {
+		claims.Scope = strings.Join(claims.Scopes, " ")
 	}
 	if claims.SessionExp > 0 && time.Now().Unix() > claims.SessionExp {
 		return nil, fmt.Errorf("session expired")

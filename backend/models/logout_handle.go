@@ -13,6 +13,7 @@ type LogoutHandle struct {
 	SessionSubject string             `bson:"session_subject,omitempty" json:"session_subject,omitempty"`
 	IDToken        string             `bson:"id_token" json:"-"`
 	SID            string             `bson:"sid,omitempty" json:"sid,omitempty"`
+	SessionVersion int64              `bson:"session_version,omitempty" json:"session_version,omitempty"`
 	Issuer         string             `bson:"issuer,omitempty" json:"issuer,omitempty"`
 	Audience       string             `bson:"audience,omitempty" json:"audience,omitempty"`
 	ExpiresAt      time.Time          `bson:"expires_at" json:"expires_at"`

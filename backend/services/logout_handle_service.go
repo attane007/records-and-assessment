@@ -203,6 +203,7 @@ func CreateLogoutHandle(ctx context.Context, coll *mongo.Collection, accountID, 
 		SessionSubject: sessionSubject,
 		IDToken:        idToken,
 		SID:            meta.SID,
+		SessionVersion: 1,
 		Issuer:         meta.Issuer,
 		Audience:       meta.Audience,
 		ExpiresAt:      expiresAt,
@@ -285,6 +286,37 @@ func RevokeLogoutHandlesBySID(ctx context.Context, coll *mongo.Collection, sid s
 		ctx,
 		bson.M{"sid": normalizedSID},
 		bson.M{"$set": bson.M{"revoked_at": now, "updated_at": now}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return ErrLogoutHandleNotFound
+	}
+	return nil
+}
+
+func UpdateLogoutHandlesSessionVersionBySID(ctx context.Context, coll *mongo.Collection, sid string, sessionVersion int64) error {
+	if coll == nil {
+		return fmt.Errorf("logout handle collection is not configured")
+	}
+
+	normalizedSID := strings.TrimSpace(sid)
+	if normalizedSID == "" || sessionVersion <= 0 {
+		return ErrLogoutHandleNotFound
+	}
+
+	now := time.Now()
+	result, err := coll.UpdateMany(
+		ctx,
+		bson.M{
+			"sid": normalizedSID,
+			"$or": []bson.M{
+				{"session_version": bson.M{"$lt": sessionVersion}},
+				{"session_version": bson.M{"$exists": false}},
+			},
+		},
+		bson.M{"$set": bson.M{"session_version": sessionVersion, "updated_at": now}},
 	)
 	if err != nil {
 		return err

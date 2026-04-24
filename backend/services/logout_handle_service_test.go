@@ -54,6 +54,40 @@ func TestIssueSessionJWTWithLogoutHandlePreservesHandleID(t *testing.T) {
 	if claims.SessionVersion != 1 {
 		t.Fatalf("SessionVersion mismatch: got %d want %d", claims.SessionVersion, 1)
 	}
+	if claims.AuthSubject != "acct-1" {
+		t.Fatalf("AuthSubject mismatch: got %q want %q", claims.AuthSubject, "acct-1")
+	}
+	if claims.TenantID != "acct-1" {
+		t.Fatalf("TenantID mismatch: got %q want %q", claims.TenantID, "acct-1")
+	}
+	if claims.DisplayName != "tester" {
+		t.Fatalf("DisplayName mismatch: got %q want %q", claims.DisplayName, "tester")
+	}
+	if len(claims.Scopes) != 3 {
+		t.Fatalf("Scopes mismatch: got %#v", claims.Scopes)
+	}
+	if claims.Scope != "openid profile email" {
+		t.Fatalf("Scope mismatch: got %q", claims.Scope)
+	}
+}
+
+func TestVerifySessionJWTAllowExpiredAcceptsPreviousSecret(t *testing.T) {
+	t.Setenv("AUTH_SECRET_PREVIOUS", "current-secret")
+	token, err := IssueSessionJWT("current-secret", "sub-1", "tester", "acct-1", 3600)
+	if err != nil {
+		t.Fatalf("IssueSessionJWT returned error: %v", err)
+	}
+
+	claims, err := VerifySessionJWTAllowExpired("wrong-secret", token)
+	if err != nil {
+		t.Fatalf("VerifySessionJWTAllowExpired returned error: %v", err)
+	}
+	if claims.AuthSubject != "acct-1" {
+		t.Fatalf("AuthSubject mismatch: got %q want %q", claims.AuthSubject, "acct-1")
+	}
+	if claims.DisplayName != "tester" {
+		t.Fatalf("DisplayName mismatch: got %q want %q", claims.DisplayName, "tester")
+	}
 }
 
 func TestIssueSessionJWTForSessionIncrementsSessionVersion(t *testing.T) {
@@ -79,5 +113,14 @@ func TestIssueSessionJWTForSessionIncrementsSessionVersion(t *testing.T) {
 
 	if refreshedClaims.SessionVersion != originalClaims.SessionVersion+1 {
 		t.Fatalf("SessionVersion mismatch: got %d want %d", refreshedClaims.SessionVersion, originalClaims.SessionVersion+1)
+	}
+	if refreshedClaims.AuthSubject != originalClaims.AuthSubject {
+		t.Fatalf("AuthSubject mismatch: got %q want %q", refreshedClaims.AuthSubject, originalClaims.AuthSubject)
+	}
+	if refreshedClaims.DisplayName != originalClaims.DisplayName {
+		t.Fatalf("DisplayName mismatch: got %q want %q", refreshedClaims.DisplayName, originalClaims.DisplayName)
+	}
+	if len(refreshedClaims.Scopes) != len(originalClaims.Scopes) {
+		t.Fatalf("Scopes length mismatch: got %d want %d", len(refreshedClaims.Scopes), len(originalClaims.Scopes))
 	}
 }

@@ -43,7 +43,10 @@ type authErrorDetail struct {
 	RequestID string `json:"request_id,omitempty"`
 }
 
-const backchannelLogoutEventClaim = "http://schemas.openid.net/event/backchannel-logout"
+const (
+	backchannelLogoutEventClaim = "http://schemas.openid.net/event/backchannel-logout"
+	sessionUpdatedEventType     = "session.updated"
+)
 
 // NewAuthHandler returns a new AuthHandler.
 func NewAuthHandler(logoutHandlesColl *mongo.Collection) *AuthHandler {
@@ -127,8 +130,14 @@ func sessionLogoutHandleActive(ctx context.Context, logoutHandlesColl *mongo.Col
 		return nil
 	}
 
-	_, err := services.GetLogoutHandleByID(ctx, logoutHandlesColl, handleID)
-	return err
+	handle, err := services.GetLogoutHandleByID(ctx, logoutHandlesColl, handleID)
+	if err != nil {
+		return err
+	}
+	if handle != nil && handle.SessionVersion > 0 && claims.SessionVersion < handle.SessionVersion {
+		return services.ErrLogoutHandleRevoked
+	}
+	return nil
 }
 
 func (h *AuthHandler) frontendURL() string {
@@ -480,14 +489,40 @@ func (h *AuthHandler) Session(c *gin.Context) {
 			return
 		}
 
+		displayName := strings.TrimSpace(claims.DisplayName)
+		if displayName == "" {
+			displayName = strings.TrimSpace(claims.Username)
+		}
+		if displayName == "" {
+			displayName = strings.TrimSpace(claims.AuthSubject)
+		}
+
+		authSubject := strings.TrimSpace(claims.AuthSubject)
+		if authSubject == "" {
+			authSubject = strings.TrimSpace(claims.AccountID)
+		}
+
+		tenantID := strings.TrimSpace(claims.TenantID)
+		if tenantID == "" {
+			tenantID = authSubject
+		}
+
+		scopes := append([]string(nil), claims.Scopes...)
+		if len(scopes) == 0 && strings.TrimSpace(claims.Scope) != "" {
+			scopes = strings.Fields(claims.Scope)
+		}
+
 		setNoStoreHeaders(c)
 		c.JSON(http.StatusOK, gin.H{
 			"authenticated": true,
 			"user": gin.H{
-				"subject":      claims.Sub,
-				"auth_subject": claims.AccountID,
-				"tenant_id":    claims.AccountID,
-				"display_name": claims.Username,
+				"subject":         claims.Sub,
+				"auth_subject":    authSubject,
+				"account_id":      claims.AccountID,
+				"tenant_id":       tenantID,
+				"display_name":    displayName,
+				"scopes":          scopes,
+				"session_version": claims.SessionVersion,
 			},
 			"session": gin.H{
 				"expires_at_unix": claims.SessionExp,
@@ -522,14 +557,40 @@ func (h *AuthHandler) Session(c *gin.Context) {
 		return
 	}
 
+	displayName := strings.TrimSpace(refreshedClaims.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(refreshedClaims.Username)
+	}
+	if displayName == "" {
+		displayName = strings.TrimSpace(refreshedClaims.AuthSubject)
+	}
+
+	authSubject := strings.TrimSpace(refreshedClaims.AuthSubject)
+	if authSubject == "" {
+		authSubject = strings.TrimSpace(refreshedClaims.AccountID)
+	}
+
+	tenantID := strings.TrimSpace(refreshedClaims.TenantID)
+	if tenantID == "" {
+		tenantID = authSubject
+	}
+
+	scopes := append([]string(nil), refreshedClaims.Scopes...)
+	if len(scopes) == 0 && strings.TrimSpace(refreshedClaims.Scope) != "" {
+		scopes = strings.Fields(refreshedClaims.Scope)
+	}
+
 	setNoStoreHeaders(c)
 	c.JSON(http.StatusOK, gin.H{
 		"authenticated": true,
 		"user": gin.H{
-			"subject":      refreshedClaims.Sub,
-			"auth_subject": refreshedClaims.AccountID,
-			"tenant_id":    refreshedClaims.AccountID,
-			"display_name": refreshedClaims.Username,
+			"subject":         refreshedClaims.Sub,
+			"auth_subject":    authSubject,
+			"account_id":      refreshedClaims.AccountID,
+			"tenant_id":       tenantID,
+			"display_name":    displayName,
+			"scopes":          scopes,
+			"session_version": refreshedClaims.SessionVersion,
 		},
 		"session": gin.H{
 			"expires_at_unix":              refreshedClaims.SessionExp,
@@ -691,6 +752,12 @@ func (h *AuthHandler) BackchannelLogout(c *gin.Context) {
 		return
 	}
 
+	rawSessionEventToken := strings.TrimSpace(c.Request.FormValue("session_event_token"))
+	if rawSessionEventToken != "" {
+		h.BackchannelSessionEvent(c, secret, clientID, issuer, rawSessionEventToken)
+		return
+	}
+
 	rawLogoutToken := strings.TrimSpace(c.Request.FormValue("logout_token"))
 	if rawLogoutToken == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "logout_token is required"})
@@ -720,6 +787,44 @@ func (h *AuthHandler) BackchannelLogout(c *gin.Context) {
 	if err := services.RevokeLogoutHandlesBySID(ctx, h.logoutHandlesColl, claims.Sid); err != nil && !errors.Is(err, services.ErrLogoutHandleNotFound) {
 		log.Printf("backchannel logout revoke failed for sid=%s: %v", claims.Sid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke logout handle"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Status(http.StatusNoContent)
+}
+
+func (h *AuthHandler) BackchannelSessionEvent(c *gin.Context, secret, clientID, issuer, rawSessionEventToken string) {
+	if h == nil || h.logoutHandlesColl == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "logout handle collection is not configured"})
+		return
+	}
+
+	claims, err := verifyBackchannelSessionEventToken(secret, issuer, clientID, rawSessionEventToken)
+	if err != nil {
+		log.Printf("backchannel session event token rejected: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session event token"})
+		return
+	}
+	if strings.TrimSpace(claims.ID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session event token missing jti"})
+		return
+	}
+	if h.backchannelEvents != nil && !h.backchannelEvents.Remember(claims.ID) {
+		log.Printf("backchannel session event replay ignored jti=%s sid=%s", claims.ID, claims.Sid)
+		c.Header("Cache-Control", "no-store")
+		c.Header("Pragma", "no-cache")
+		c.Status(http.StatusNoContent)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := services.UpdateLogoutHandlesSessionVersionBySID(ctx, h.logoutHandlesColl, claims.Sid, claims.SessionVersion); err != nil && !errors.Is(err, services.ErrLogoutHandleNotFound) {
+		log.Printf("backchannel session event update failed for sid=%s: %v", claims.Sid, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update logout handle"})
 		return
 	}
 
@@ -769,10 +874,59 @@ func verifyBackchannelLogoutToken(secret, issuer, audience, rawToken string) (*b
 	return claims, nil
 }
 
+func verifyBackchannelSessionEventToken(secret, issuer, audience, rawToken string) (*backchannelSessionEventTokenClaims, error) {
+	trimmedToken := strings.TrimSpace(rawToken)
+	if trimmedToken == "" {
+		return nil, errors.New("session event token is required")
+	}
+
+	claims := &backchannelSessionEventTokenClaims{}
+	token, err := jwtv5.ParseWithClaims(
+		trimmedToken,
+		claims,
+		func(token *jwtv5.Token) (any, error) {
+			if token.Method == nil || token.Method.Alg() != jwtv5.SigningMethodHS256.Alg() {
+				return nil, fmt.Errorf("unexpected session event token signing method: %v", token.Header["alg"])
+			}
+			return []byte(secret), nil
+		},
+		jwtv5.WithIssuer(strings.TrimSpace(issuer)),
+		jwtv5.WithAudience(strings.TrimSpace(audience)),
+		jwtv5.WithValidMethods([]string{jwtv5.SigningMethodHS256.Alg()}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if token == nil || !token.Valid {
+		return nil, errors.New("invalid session event token")
+	}
+	if strings.TrimSpace(claims.ID) == "" {
+		return nil, errors.New("session event token missing jti")
+	}
+	if strings.TrimSpace(claims.Sid) == "" {
+		return nil, errors.New("session event token missing sid")
+	}
+	if strings.TrimSpace(claims.EventType) != sessionUpdatedEventType {
+		return nil, errors.New("session event token missing session.updated event type")
+	}
+	if claims.SessionVersion <= 0 {
+		return nil, errors.New("session event token missing session_version")
+	}
+	return claims, nil
+}
+
 type backchannelLogoutTokenClaims struct {
 	jwtv5.RegisteredClaims
 	Sid    string                    `json:"sid,omitempty"`
 	Events map[string]map[string]any `json:"events,omitempty"`
+}
+
+type backchannelSessionEventTokenClaims struct {
+	jwtv5.RegisteredClaims
+	EventType      string `json:"event_type,omitempty"`
+	Sid            string `json:"sid,omitempty"`
+	SessionVersion int64  `json:"session_version,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 }
 
 // ─── Private helpers ───────────────────────────────────────────────────────────

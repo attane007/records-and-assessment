@@ -43,6 +43,24 @@ function getSecret(): Uint8Array {
   return enc.encode(secret);
 }
 
+function getVerificationSecrets(): Uint8Array[] {
+  const candidates = [process.env.AUTH_SECRET || "dev-secret-change-me", process.env.AUTH_SECRET_PREVIOUS || ""];
+  const secrets: Uint8Array[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      continue;
+    }
+
+    seen.add(trimmed);
+    secrets.push(enc.encode(trimmed));
+  }
+
+  return secrets;
+}
+
 function parsePositiveInt(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number.parseInt(value, 10);
@@ -94,16 +112,25 @@ export async function verifySignedToken<T extends SignedPayload>(token: string):
     const [h, p, s] = token.split(".");
     if (!h || !p || !s) return null;
     const data = `${h}.${p}`;
-    const expected = hmacSHA256(data, getSecret());
     const provided = b64urlToBytes(s);
-    if (expected.length !== provided.length) return null;
-    // constant-time compare
-    let ok = 0;
-    for (let i = 0; i < expected.length; i++) ok |= (expected[i] ?? 0) ^ (provided[i] ?? 0);
-    if (ok !== 0) return null;
-    const payload = JSON.parse(Buffer.from(b64urlToBytes(p)).toString("utf8")) as T;
-    if (typeof payload.exp !== "number" || Date.now() / 1000 >= payload.exp) return null;
-    return payload;
+
+    for (const secret of getVerificationSecrets()) {
+      const expected = hmacSHA256(data, secret);
+      if (expected.length !== provided.length) {
+        continue;
+      }
+
+      // constant-time compare
+      let ok = 0;
+      for (let i = 0; i < expected.length; i++) ok |= (expected[i] ?? 0) ^ (provided[i] ?? 0);
+      if (ok === 0) {
+        const payload = JSON.parse(Buffer.from(b64urlToBytes(p)).toString("utf8")) as T;
+        if (typeof payload.exp !== "number" || Date.now() / 1000 >= payload.exp) return null;
+        return payload;
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
