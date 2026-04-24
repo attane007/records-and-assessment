@@ -6,10 +6,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 const GLOBAL_LOGOUT_MARKER = "ra_global_logout_at";
 const SESSION_UPDATE_MARKER = "ra_session_updated_at";
 const SILENT_SYNC_LAST_ATTEMPT_KEY = "ra_admin_silent_sync_last_attempt_at";
-const SILENT_SYNC_FAST_LANE_UNTIL_KEY = "ra_admin_silent_sync_fast_lane_until";
 const SILENT_SYNC_COOLDOWN_MS = 30 * 1000;
 const SILENT_SYNC_MIN_HIDDEN_MS = 5 * 1000;
-const SILENT_SYNC_FAST_LANE_WINDOW_MS = 15 * 1000;
 
 function isAdminPath(pathname: string) {
   return pathname.startsWith("/admin");
@@ -32,23 +30,7 @@ export default function AuthSync() {
       return query ? `${pathname}?${query}` : pathname;
     })();
 
-    const consumeFastLaneBypass = () => {
-      try {
-        const now = Date.now();
-        const fastLaneUntilRaw = window.sessionStorage.getItem(SILENT_SYNC_FAST_LANE_UNTIL_KEY);
-        const fastLaneUntil = Number.parseInt(fastLaneUntilRaw || "0", 10);
-        if (!Number.isFinite(fastLaneUntil) || fastLaneUntil <= now) {
-          return false;
-        }
-
-        window.sessionStorage.removeItem(SILENT_SYNC_FAST_LANE_UNTIL_KEY);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    const attemptSilentSessionSync = (ignoreCooldown = false) => {
+    const attemptSilentSessionSync = () => {
       if (!shouldProtectPage || authEvent) {
         return;
       }
@@ -57,8 +39,7 @@ export default function AuthSync() {
         const now = Date.now();
         const lastAttemptRaw = window.localStorage.getItem(SILENT_SYNC_LAST_ATTEMPT_KEY);
         const lastAttempt = Number.parseInt(lastAttemptRaw || "0", 10);
-        const bypassCooldown = ignoreCooldown || consumeFastLaneBypass();
-        const cooldownActive = !bypassCooldown && Number.isFinite(lastAttempt) && now - lastAttempt < SILENT_SYNC_COOLDOWN_MS;
+        const cooldownActive = Number.isFinite(lastAttempt) && now - lastAttempt < SILENT_SYNC_COOLDOWN_MS;
         if (cooldownActive) {
           return;
         }
@@ -76,10 +57,6 @@ export default function AuthSync() {
       if (authEvent === "session-updated") {
         try {
           localStorage.setItem(SESSION_UPDATE_MARKER, String(Date.now()));
-          sessionStorage.setItem(
-            SILENT_SYNC_FAST_LANE_UNTIL_KEY,
-            String(Date.now() + SILENT_SYNC_FAST_LANE_WINDOW_MS),
-          );
         } catch {
           // ignore storage failures
         }
