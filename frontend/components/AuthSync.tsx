@@ -7,11 +7,9 @@ const GLOBAL_LOGOUT_MARKER = "ra_global_logout_at";
 const SESSION_UPDATE_MARKER = "ra_session_updated_at";
 const SILENT_SYNC_LAST_ATTEMPT_KEY = "ra_admin_silent_sync_last_attempt_at";
 const LAST_REFRESH_TIME_KEY = "ra_last_refresh_time_at";
-const LAST_SESSION_VERSION_KEY = "ra_last_session_version";
 const SILENT_SYNC_COOLDOWN_MS = 30 * 1000;
 const SILENT_SYNC_MIN_HIDDEN_MS = 5 * 1000;
 const REFRESH_DEBOUNCE_MS = 2 * 1000;
-const SESSION_CHECK_INTERVAL_MS = 30 * 1000; // Check for account changes every 30 seconds
 
 function isAdminPath(pathname: string) {
   return pathname.startsWith("/admin");
@@ -26,14 +24,7 @@ export default function AuthSync() {
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isRefreshingRef = useRef(false);
 
-  type SessionCheckResponse = {
-    need_refresh?: boolean;
-    reason?: string;
-    local_version?: number;
-    backend_version?: number;
-  };
-
-  const debounceRefresh = (reason: string) => {
+  const debounceRefresh = () => {
     if (isRefreshingRef.current) {
       return;
     }
@@ -72,58 +63,6 @@ export default function AuthSync() {
       }
     };
   }, []);
-
-  // Periodic check for account/session changes (backchannel session events)
-  useEffect(() => {
-    const shouldProtectPage = isAdminPath(pathname);
-    if (!shouldProtectPage) {
-      return;
-    }
-
-    const checkSessionUpdates = async () => {
-      try {
-        const response = await fetch("/api/auth/session-update-check", {
-          cache: "no-store",
-          headers: { "Accept": "application/json" },
-        });
-        
-        if (!response.ok) {
-          return;
-        }
-
-        const data = (await response.json().catch(() => null)) as SessionCheckResponse | null;
-        if (!data?.need_refresh) {
-          return;
-        }
-
-        // Prevent refresh loops caused by transient backend failures.
-        if (data.reason === "backend_error") {
-          return;
-        }
-
-        if (data.reason === "session_version_mismatch") {
-          const backendVersion = data.backend_version;
-          if (Number.isFinite(backendVersion) && (backendVersion ?? 0) > 0) {
-            const versionMarker = String(Math.floor(backendVersion as number));
-            const lastVersion = window.localStorage.getItem(LAST_SESSION_VERSION_KEY);
-            if (lastVersion === versionMarker) {
-              return;
-            }
-            window.localStorage.setItem(LAST_SESSION_VERSION_KEY, versionMarker);
-          }
-        }
-
-        if (data.need_refresh) {
-          debounceRefresh("session_update_check");
-        }
-      } catch {
-        // Silently ignore errors in session check
-      }
-    };
-
-    const intervalId = setInterval(checkSessionUpdates, SESSION_CHECK_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [pathname, router]);
 
   useEffect(() => {
     const shouldProtectPage = isAdminPath(pathname);
@@ -172,7 +111,7 @@ export default function AuthSync() {
         const nextUrl = cleanedParams.toString() ? `${pathname}?${cleanedParams.toString()}` : pathname;
         router.replace(nextUrl);
         if (shouldProtectPage) {
-          debounceRefresh("auth_event");
+          debounceRefresh();
         }
       }
     }
@@ -191,7 +130,7 @@ export default function AuthSync() {
       if (event.key === SESSION_UPDATE_MARKER && event.newValue) {
         window.dispatchEvent(new Event("gauth:session-updated"));
         if (shouldProtectPage) {
-          debounceRefresh("storage_marker");
+          debounceRefresh();
         }
       }
     };
