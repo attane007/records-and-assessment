@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 	"net/url"
@@ -531,73 +530,8 @@ func (h *AuthHandler) Session(c *gin.Context) {
 		return
 	}
 
-	claims, allowErr := services.VerifySessionJWTAllowExpired(secret, bearerToken)
-	if allowErr != nil {
-		setNoStoreHeaders(c)
-		c.JSON(http.StatusOK, gin.H{"authenticated": false})
-		return
-	}
-	if revocationErr := sessionLogoutHandleActive(c.Request.Context(), h.logoutHandlesColl, claims); revocationErr != nil {
-		log.Printf("session refresh blocked by revoked logout handle: %v", revocationErr)
-		setNoStoreHeaders(c)
-		c.JSON(http.StatusOK, gin.H{"authenticated": false})
-		return
-	}
-
-	refreshedToken, refreshErr := services.IssueSessionJWTForSession(secret, claims, 8*3600)
-	if refreshErr != nil {
-		setNoStoreHeaders(c)
-		c.JSON(http.StatusOK, gin.H{"authenticated": false})
-		return
-	}
-
-	refreshedClaims, verifyErr := services.VerifySessionJWTAllowExpired(secret, refreshedToken)
-	if verifyErr != nil {
-		authError(c, http.StatusInternalServerError, "internal_error", "Session refresh verification failed", "session_refresh_verify_failed", true)
-		return
-	}
-
-	displayName := strings.TrimSpace(refreshedClaims.DisplayName)
-	if displayName == "" {
-		displayName = strings.TrimSpace(refreshedClaims.Username)
-	}
-	if displayName == "" {
-		displayName = strings.TrimSpace(refreshedClaims.AuthSubject)
-	}
-
-	authSubject := strings.TrimSpace(refreshedClaims.AuthSubject)
-	if authSubject == "" {
-		authSubject = strings.TrimSpace(refreshedClaims.AccountID)
-	}
-
-	tenantID := strings.TrimSpace(refreshedClaims.TenantID)
-	if tenantID == "" {
-		tenantID = authSubject
-	}
-
-	scopes := append([]string(nil), refreshedClaims.Scopes...)
-	if len(scopes) == 0 && strings.TrimSpace(refreshedClaims.Scope) != "" {
-		scopes = strings.Fields(refreshedClaims.Scope)
-	}
-
 	setNoStoreHeaders(c)
-	c.JSON(http.StatusOK, gin.H{
-		"authenticated": true,
-		"user": gin.H{
-			"subject":         refreshedClaims.Sub,
-			"auth_subject":    authSubject,
-			"account_id":      refreshedClaims.AccountID,
-			"tenant_id":       tenantID,
-			"display_name":    displayName,
-			"scopes":          scopes,
-			"session_version": refreshedClaims.SessionVersion,
-		},
-		"session": gin.H{
-			"expires_at_unix":              refreshedClaims.SessionExp,
-			"access_token_expires_at_unix": refreshedClaims.Exp,
-		},
-		"refreshed_token": refreshedToken,
-	})
+	c.JSON(http.StatusOK, gin.H{"authenticated": false})
 }
 
 type logoutRequest struct {
@@ -695,138 +629,24 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // GET /auth/frontchannel-logout — clear local state and broadcast global-logout signal.
 // POST /auth/frontchannel-logout — accept a backchannel logout_token and revoke local handles by sid.
 func (h *AuthHandler) FrontchannelLogout(c *gin.Context) {
-	if c.Request != nil && c.Request.Method == http.MethodPost {
-		h.BackchannelLogout(c)
-		return
-	}
-
-	isProd := os.Getenv("GO_ENV") == "production"
 	setNoStoreHeaders(c)
-	c.SetCookie("oidc_tx", "", -1, "/", "", isProd, true)
-	c.SetCookie("session", "", -1, "/", "", isProd, true)
-
-	htmlContent := `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta http-equiv="Cache-Control" content="no-store" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Logout</title>
-</head>
-<body>
-  <script>
-    (function () {
-      try {
-        localStorage.setItem("ra_global_logout_at", String(Date.now()));
-      } catch (e) {}
-      try {
-        window.dispatchEvent(new Event("gauth:global-logout"));
-      } catch (e) {}
-    })();
-  </script>
-</body>
-</html>`
-
-	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html.UnescapeString(htmlContent)))
+	c.Status(http.StatusNoContent)
 }
 
 // POST /auth/frontchannel-logout — receive backchannel logout from the OP.
 func (h *AuthHandler) BackchannelLogout(c *gin.Context) {
-	secret := strings.TrimSpace(os.Getenv("OIDC_CLIENT_SECRET"))
-	clientID := strings.TrimSpace(os.Getenv("OIDC_CLIENT_ID"))
-	issuer := strings.TrimSpace(os.Getenv("OIDC_BASE_URL"))
-	if issuer == "" {
-		issuer = strings.TrimSpace(os.Getenv("OIDC_ISSUER"))
-	}
-	if secret == "" || clientID == "" || issuer == "" {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "backchannel logout is not configured"})
-		return
-	}
-	if h.logoutHandlesColl == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "logout handle collection is not configured"})
-		return
-	}
-
-	if err := c.Request.ParseForm(); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid logout token payload"})
-		return
-	}
-
-	rawSessionEventToken := strings.TrimSpace(c.Request.FormValue("session_event_token"))
-	if rawSessionEventToken != "" {
-		h.BackchannelSessionEvent(c, secret, clientID, issuer, rawSessionEventToken)
-		return
-	}
-
-	rawLogoutToken := strings.TrimSpace(c.Request.FormValue("logout_token"))
-	if rawLogoutToken == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logout_token is required"})
-		return
-	}
-
-	claims, err := verifyBackchannelLogoutToken(secret, issuer, clientID, rawLogoutToken)
-	if err != nil {
-		log.Printf("backchannel logout token rejected: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid logout token"})
-		return
-	}
-	if strings.TrimSpace(claims.ID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "logout token missing jti"})
-		return
-	}
-	if h.backchannelEvents != nil && !h.backchannelEvents.Remember(claims.ID) {
-		log.Printf("backchannel logout replay ignored jti=%s sid=%s", claims.ID, claims.Sid)
-		c.Header("Cache-Control", "no-store")
-		c.Header("Pragma", "no-cache")
-		c.Status(http.StatusNoContent)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-	if err := services.RevokeLogoutHandlesBySID(ctx, h.logoutHandlesColl, claims.Sid); err != nil && !errors.Is(err, services.ErrLogoutHandleNotFound) {
-		log.Printf("backchannel logout revoke failed for sid=%s: %v", claims.Sid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to revoke logout handle"})
-		return
-	}
-
+	_ = h
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
 	c.Status(http.StatusNoContent)
 }
 
 func (h *AuthHandler) BackchannelSessionEvent(c *gin.Context, secret, clientID, issuer, rawSessionEventToken string) {
-	if h == nil || h.logoutHandlesColl == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "logout handle collection is not configured"})
-		return
-	}
-
-	claims, err := verifyBackchannelSessionEventToken(secret, issuer, clientID, rawSessionEventToken)
-	if err != nil {
-		log.Printf("backchannel session event token rejected: %v", err)
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid session event token"})
-		return
-	}
-	if strings.TrimSpace(claims.ID) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "session event token missing jti"})
-		return
-	}
-	if h.backchannelEvents != nil && !h.backchannelEvents.Remember(claims.ID) {
-		log.Printf("backchannel session event replay ignored jti=%s sid=%s", claims.ID, claims.Sid)
-		c.Header("Cache-Control", "no-store")
-		c.Header("Pragma", "no-cache")
-		c.Status(http.StatusNoContent)
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-
-	if err := services.UpdateLogoutHandlesSessionVersionBySID(ctx, h.logoutHandlesColl, claims.Sid, claims.SessionVersion); err != nil && !errors.Is(err, services.ErrLogoutHandleNotFound) {
-		log.Printf("backchannel session event update failed for sid=%s: %v", claims.Sid, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update logout handle"})
-		return
-	}
+	_ = h
+	_ = secret
+	_ = clientID
+	_ = issuer
+	_ = rawSessionEventToken
 
 	c.Header("Cache-Control", "no-store")
 	c.Header("Pragma", "no-cache")
